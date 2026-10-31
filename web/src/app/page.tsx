@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { won } from "@/components/format";
 import { DaysLeft, Qty } from "@/components/qty";
-import { shortDate } from "@/lib/engine/dates";
+import { useInsights } from "@/components/use-insights";
+import { shortDate, weekdayOf } from "@/lib/engine/dates";
 import { daysOf, fmtQty } from "@/lib/engine/units";
 import { useApp } from "@/state/app-state";
 
@@ -12,6 +13,7 @@ const GUIDE_KEY = "guide-dismissed-v1";
 
 export default function Dashboard() {
   const { result, snapshot, settings } = useApp();
+  const insights = useInsights(snapshot?.meta.storeId);
   if (!result || !snapshot) return null;
   const { alerts, orders, plans } = result;
   const store = snapshot.stores.find((s) => s.store_id === snapshot.meta.storeId);
@@ -38,6 +40,7 @@ export default function Dashboard() {
         <p className="hint">{store?.store_name} · {shortDate(snapshot.meta.asOf)}</p>
         <h2 className="mt-0.5 text-xl font-bold tracking-[-0.02em]">오늘 할 일</h2>
         <p className="hint mt-1">판매 추세, 남은 재고와 사용기한, 공급사 발주 조건을 따져 오늘 처리할 일을 급한 순서로 정리했습니다.</p>
+        <WeekdayNote asOf={snapshot.meta.asOf} weekday={insights?.weekday} holiday={result.ctx.holidays.has(snapshot.meta.asOf) ? result.ctx.holMult : null} />
       </header>
 
       <Guide />
@@ -204,4 +207,22 @@ function timeLeft(now: string, cutoff: string): string | null {
   const d = m(cutoff) - m(now);
   if (!(d > 0)) return null;
   return d >= 60 ? `${Math.floor(d / 60)}시간${d % 60 ? ` ${d % 60}분` : ""}` : `${d}분`;
+}
+
+/** 오늘 요일이 이 매장에서 평소보다 바쁜 날인지 (팀 데이터 분석: 요일별 평균 판매) */
+function WeekdayNote({ asOf, weekday, holiday }: { asOf: string; weekday?: { weekday: string; avg_net_sales: number }[]; holiday: number | null }) {
+  if (!weekday?.length) return null;
+  const wd = weekdayOf(asOf);
+  const today = weekday.find((w) => w.weekday === wd);
+  if (!today) return null;
+  const mean = weekday.reduce((a, w) => a + w.avg_net_sales, 0) / weekday.length;
+  const diff = Math.round((today.avg_net_sales / mean - 1) * 100);
+  const busiest = [...weekday].sort((a, b) => b.avg_net_sales - a.avg_net_sales)[0];
+  return (
+    <p className="mt-2 inline-flex flex-wrap items-center gap-1.5 rounded-md bg-[var(--accent-soft)] px-2.5 py-1 text-sm">
+      <span className="font-semibold">{wd}요일</span>
+      은 이 매장 평균보다 판매가 <b>{diff >= 0 ? `${diff}% 많은` : `${-diff}% 적은`}</b> 날입니다.
+      <span className="hint">(가장 바쁜 요일: {busiest.weekday}요일{holiday ? ` · 오늘은 공휴일이라 평소의 ${holiday.toFixed(2)}배로 예측` : ""})</span>
+    </p>
+  );
 }

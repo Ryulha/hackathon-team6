@@ -83,6 +83,8 @@ export type Snapshot = {
   prices: PriceRow[]; calendar: CalendarRow[]; promotions: Promotion[]; menuAvailability: MenuAvailability[];
   /** 기준일 전 lookback 기간 일별 수요 */
   demandHistory: DailyDemand[];
+  /** 기준일 전 전체 기간 매장 일별 판매 합계(순수요 = 수요 − 취소) — 요일 지수·공휴일 배수 계산용 */
+  dailyTotals: { date: string; y: number }[];
   /** 기준일 전 최근 재고 이력(차트·과잉 판단) */
   inventoryHistory: InventoryDaily[];
   /** 기준일 전날 영업 종료 후 lot 잔량 = 기준일 영업 시작 재고 */

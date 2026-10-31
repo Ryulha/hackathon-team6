@@ -5,6 +5,7 @@ import { asc, eq, max } from "drizzle-orm";
 import { db, sql } from "@/db/client";
 import { masterEdits, orderDrafts, priceEntries, salesDaily, stockCounts } from "@/db/schema";
 import { addDays } from "./engine/dates";
+import { dailyTotals } from "./engine/forecast";
 import {
   applyMasterEdits, draftArrivals, mergePrices, projectStartStock,
   type DraftLine, type MasterEdit, type PriceEntry, type StockCount, type SubmittedDraft,
@@ -130,7 +131,7 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
     src.rows<Menu>("menus"), src.rows<Ingredient>("ingredients"), src.rows<BomRow>("bom"),
     src.rows<Supplier>("suppliers"), src.rows<PriceRow>("ingredient_price_history"), src.rows<CalendarRow>("calendar"),
     src.rows<Promotion>("promotions", st), src.rows<MenuAvailability>("menu_availability", st),
-    src.rows<DailyDemand>("agg_daily_demand", { ...st, dateCol: "date", from: histFrom, to: asOf }),
+    src.rows<DailyDemand>("agg_daily_demand", { ...st, dateCol: "date", to: asOf }),
     src.rows<InventoryDaily>("inventory_daily", { ...st, dateCol: "date", from: recentFrom, to: asOf }),
     src.rows<LotRow>("inventory_lots_daily", { ...st, dateCol: "date", from: baseDay, to: addDays(baseDay, 1) }),
     src.rows<PurchaseOrder>("purchase_orders", { ...st, dateCol: "order_date", from: addDays(baseDay, -30), to: addDays(baseDay, 1) }),
@@ -139,6 +140,7 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
     src.rows<DailyWaste>("agg_daily_waste", { ...st, dateCol: "date", from: recentFrom, to: asOf }),
   ]);
 
+  const allDemand = [...providedDemand, ...uploaded.filter((u) => u.date < asOf)];
   const { suppliers, ingredients, applied } = applyMasterEdits(rawSuppliers, rawIngredients, ov.masterEdits);
   const prices = mergePrices(rawPrices, ov.priceEntries);
   const appOrders = draftArrivals(ov.drafts, providedEnd, asOf);
@@ -159,7 +161,8 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
       },
     },
     stores, menus, ingredients, bom, suppliers, prices, calendar, promotions, menuAvailability,
-    demandHistory: [...providedDemand, ...uploaded.filter((u) => u.date >= histFrom && u.date < asOf)],
+    demandHistory: allDemand.filter((r) => r.date >= histFrom),
+    dailyTotals: [...dailyTotals(allDemand, storeId)].map(([date, y]) => ({ date, y })).sort((a, b) => a.date.localeCompare(b.date)),
     inventoryHistory: inventoryHistory.sort((a, b) => a.date.localeCompare(b.date)),
     lots: projected.lots, openOrders: projected.openOrders, recentStockouts, recentWaste,
   };

@@ -3,12 +3,11 @@
 import { useMemo, type ReactNode } from "react";
 import { won } from "@/components/format";
 import { CALC_KEYS } from "@/components/settings-panel";
-import { DEFAULT_SETTINGS, runEngine, type EngineResult, type EngineSettings } from "@/lib/engine";
-import { addDays, parseList, shortDate } from "@/lib/engine/dates";
+import { DEFAULT_SETTINGS, OPT, SERVICE_LEVELS, runEngine, type EngineResult, type EngineSettings, type ServiceLevel } from "@/lib/engine";
 import { fmtQty } from "@/lib/engine/units";
 import { useApp } from "@/state/app-state";
 
-type NumKey = "demandAdjustPct" | "lookbackWeeks" | "safetyDays" | "leadTimeBufferDays" | "expiryWarnDays" | "overstockDays";
+type NumKey = "demandAdjustPct" | "lookbackWeeks" | "leadTimeBufferDays" | "expiryWarnDays" | "overstockDays";
 
 export default function SettingsPage() {
   const { snapshot, result, settings, setSettings, overrides } = useApp();
@@ -48,7 +47,9 @@ export default function SettingsPage() {
         <section className="card flex flex-col gap-5">
           <h3 className="section-title">수요 예측</h3>
           {num("lookbackWeeks", "예측에 쓸 과거 기간", "주", 1, 12, 1,
-            <>최근 몇 주의 <b>같은 요일</b> 판매를 평균 내어 앞으로의 수요로 봅니다. 짧으면 최근 변화를 빨리 따라가고, 길면 들쭉날쭉한 날의 영향이 줄어듭니다.</>)}
+            <>최근 몇 주 판매로 메뉴별 평소 수준을 잡고, 여기에 <b>요일별 차이</b>(최근 {settings.lookbackWeeks * 2}주 매장 전체 판매 기준)와
+              <b> 공휴일 효과</b>(과거 공휴일이 같은 요일 평일보다 몇 배였는지, 현재 ×{result.ctx.holMult.toFixed(2)})를 곱해 예측합니다.
+              짧으면 최근 변화를 빨리 따라가고, 길면 들쭉날쭉한 날의 영향이 줄어듭니다.</>)}
           {num("demandAdjustPct", "수요 증감", "%", -50, 100, 5,
             <>데이터에 없는 변화(행사 예정, 날씨, 주변 공사 등)를 예상할 때 전체 수요를 이만큼 늘리거나 줄입니다. 예: +20%면 모든 메뉴를 20% 더 팔릴 것으로 보고 계산합니다.</>)}
           <PromoControl />
@@ -56,10 +57,22 @@ export default function SettingsPage() {
 
         <section className="card flex flex-col gap-5">
           <h3 className="section-title">발주 여유분</h3>
-          {num("safetyDays", "여유분(안전재고)", "일치", 0, 7, 0.5,
-            <>예측보다 많이 팔릴 때를 대비해 하루 사용량의 몇 일치를 더 주문할지 정합니다.
-              {example && <> 예: {example.ingredient.ingredient_name}은 하루 약 {fmtQty(example.avgDailyNeed, example.ingredient)}를 쓰므로 1일치면 그만큼 더 주문합니다.</>}
-              {" "}늘리면 품절 위험은 줄지만 재고·폐기가 늘어납니다.</>)}
+          <Control label="얼마나 넉넉하게 주문할까요?" value={SERVICE_LEVELS[settings.serviceLevel].label}
+            changed={settings.serviceLevel !== DEFAULT_SETTINGS.serviceLevel} defaultText={`기본 ${SERVICE_LEVELS[DEFAULT_SETTINGS.serviceLevel].label}`}
+            desc={<>판매는 날마다 들쭉날쭉해서 예측보다 많이 팔리는 날이 있습니다. 최근 8주 동안 하루 사용량이 예측에서 얼마나 벗어났는지(변동폭)를 재고,
+              다음 입고까지 그 변동을 버틸 만큼 여유분을 더 주문합니다.
+              {example && <> 예: {example.ingredient.ingredient_name}은 하루 변동폭이 약 {fmtQty(example.sigma, example.ingredient)}입니다.</>}
+              <span className="mt-1 block">사용기한 {OPT.longShelf}일 이상인 품목은 남아도 버릴 위험이 낮아 항상 &lsquo;넉넉하게&rsquo; 이상으로, 최근 {OPT.stockoutWindow}일 안에 품절된 품목은 한 단계 더 넉넉하게 잡습니다.</span></>}>
+            <div className="tabs w-full" role="radiogroup" aria-label="여유분 수준">
+              {(Object.keys(SERVICE_LEVELS) as ServiceLevel[]).map((k) => (
+                <button key={k} role="radio" aria-checked={settings.serviceLevel === k}
+                  className="tab flex-1" onClick={() => setSettings({ serviceLevel: k })} title={SERVICE_LEVELS[k].hint}>
+                  {SERVICE_LEVELS[k].label}
+                </button>
+              ))}
+            </div>
+            <span className="hint">{SERVICE_LEVELS[settings.serviceLevel].hint}</span>
+          </Control>
           {num("leadTimeBufferDays", "입고 지연 대비", "일", 0, 3, 1,
             <>공급사가 늦게 가져올 것에 대비해 도착일을 이만큼 늦춰 잡고 계산합니다. 제공 데이터에는 지연 입고가 없어서 기본은 0일입니다.</>)}
         </section>
@@ -94,35 +107,25 @@ function Control({ label, value, changed, desc, defaultText, children }: {
   );
 }
 
-/** 프로모션 반영 — 지금 매장·기간에 실제로 영향이 있는지 함께 보여준다 */
+/** 행사 진행 가정 — 과거 행사 때의 메뉴별 판매 배수를 예측에 곱한다 (팀 엔진 promo_on) */
 function PromoControl() {
-  const { snapshot, settings, setSettings } = useApp();
-  const snap = snapshot!;
-  const asOf = snap.meta.asOf;
-  const histFrom = addDays(asOf, -7 * settings.lookbackWeeks);
-  const menuName = (id: string) => snap.menus.find((m) => m.menu_id === id)?.menu_name ?? id;
-  const promos = snap.promotions;
-  const upcoming = promos.filter((p) => p.end_date >= asOf);
-  const inHistory = promos.filter((p) => p.end_date >= histFrom && p.start_date < asOf);
-  const describe = (p: (typeof promos)[number]) =>
-    `${p.promo_type} ${shortDate(p.start_date)}~${shortDate(p.end_date)} (${parseList(p.target_menu).map(menuName).join(", ")})`;
-
+  const { snapshot, result, settings, setSettings } = useApp();
+  const menuName = (id: string) => snapshot!.menus.find((m) => m.menu_id === id)?.menu_name ?? id;
+  const withHistory = result!.basis.filter((b) => b.promoMult !== undefined);
   return (
-    <Control label="행사(프로모션) 효과 반영" value={settings.applyPromo ? "켜짐" : "꺼짐"} changed={!settings.applyPromo} defaultText="기본 켜짐"
+    <Control label="행사를 한다면?" value={settings.applyPromo ? "행사 진행 가정" : "평소대로"} changed={settings.applyPromo !== DEFAULT_SETTINGS.applyPromo} defaultText="기본 평소대로"
       desc={<>
-        행사 기록(08_promotions)이 있는 메뉴는 행사 기간에 평소보다 많이 팔립니다. 켜 두면 과거 행사 때 평소보다 몇 배 팔렸는지 계산해 앞으로의 행사 기간 예측에 곱합니다.
-        (평소 수요를 계산할 때 과거 행사 기간은 켜고 끄는 것과 관계없이 항상 빼서, 행사 때문에 평소 예측이 부풀지 않게 합니다.)
+        이 매장에서 과거에 했던 행사(08_promotions) 기간에 대상 메뉴가 직전 4주보다 몇 배 팔렸는지 계산해 두었다가, 켜면 그 배수를 예측에 곱합니다.
+        행사를 앞두고 발주량을 미리 가늠할 때 쓰세요.
         <span className="mt-1.5 block rounded-md bg-[var(--surface-2)] px-2.5 py-1.5 text-[var(--foreground)]">
-          {upcoming.length
-            ? <>이 매장에 예정된 행사: {upcoming.map(describe).join(" · ")} → 해당 기간 예측에 반영됩니다.</>
-            : inHistory.length
-              ? <>앞으로 예정된 행사는 없습니다. 예측 기간 안의 과거 행사({inHistory.map(describe).join(" · ")})는 평소 수요 계산에서 제외됩니다.</>
-              : <>이 매장·기간에는 행사가 없어 켜든 끄든 결과가 같습니다.{promos.length ? ` (이 매장 행사: ${promos.map(describe).join(" · ")})` : " 제공 데이터의 행사는 S02 매장 7월 1건뿐입니다."}</>}
+          {withHistory.length
+            ? <>이 매장 행사 효과: {withHistory.map((b) => `${menuName(b.menuId)} ×${b.promoMult!.toFixed(2)}`).join(" · ")}</>
+            : <>이 매장에는 과거 행사 기록이 없어 켜도 결과가 같습니다. (제공 데이터의 행사는 가상매장 B 7월 1건뿐입니다.)</>}
         </span>
       </>}>
       <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
         <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={settings.applyPromo} onChange={(e) => setSettings({ applyPromo: e.target.checked })} />
-        행사 기간 수요 보정
+        행사를 진행한다고 보고 계산
       </label>
     </Control>
   );

@@ -6,7 +6,7 @@ import { addDays } from "@/lib/engine/dates";
 import { useApp } from "@/state/app-state";
 
 /** 추천 설정 페이지에서 다루는 항목 (현재 시각은 매일 바꾸는 값이라 여기 남김) */
-export const CALC_KEYS = ["demandAdjustPct", "lookbackWeeks", "applyPromo", "safetyDays", "leadTimeBufferDays", "expiryWarnDays", "overstockDays"] as const satisfies readonly (keyof EngineSettings)[];
+export const CALC_KEYS = ["demandAdjustPct", "lookbackWeeks", "applyPromo", "serviceLevel", "leadTimeBufferDays", "expiryWarnDays", "overstockDays"] as const satisfies readonly (keyof EngineSettings)[];
 
 /** 왼쪽 패널: 매일 바꾸는 값(매장·기준일·현재 시각)만 */
 export function SettingsPanel() {

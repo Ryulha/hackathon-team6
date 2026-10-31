@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { won } from "@/components/format";
 import { DaysLeft, Qty } from "@/components/qty";
+import { useInsights } from "@/components/use-insights";
+import type { Insights } from "@/lib/insights";
 import { diffDays, shortDate } from "@/lib/engine/dates";
 import { daysOf, fmtQty } from "@/lib/engine/units";
 import type { Ingredient } from "@/lib/types";
@@ -16,6 +19,7 @@ const toChart = (q: number, ing: Ingredient) =>
 
 export default function InventoryPage() {
   const { result, snapshot, settings } = useApp();
+  const insights = useInsights(snapshot?.meta.storeId);
   const [sel, setSel] = useState<string | null>(null);
   if (!result || !snapshot) return null;
   const asOf = snapshot.meta.asOf;
@@ -63,7 +67,9 @@ export default function InventoryPage() {
               return (
                 <tr key={id} className="row-hover cursor-pointer" aria-selected={id === ing.ingredient_id}
                   style={id === ing.ingredient_id ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--brand)" } : undefined} onClick={() => setSel(id)}>
-                  <td>{p.ingredient.ingredient_name}<div className="hint">{p.ingredient.storage}</div></td>
+                  <td>{p.ingredient.ingredient_name}
+                    <div className="hint">{p.ingredient.storage}
+                      {insights?.wasteByIngredient[id] && <> · 폐기 주원인 <b>{insights.wasteByIngredient[id].reason}</b></>}</div></td>
                   <td className="num"><Qty qty={p.onHand} ing={p.ingredient} /></td>
                   <td><DaysLeft days={days} risk={p.shortageBeforeArrival > 0} /></td>
                   <td>{firstExpiry ? <>{shortDate(firstExpiry.last_use_date, asOf)} <Expiry left={left!} warn={settings.expiryWarnDays} /></> : <span className="hint">—</span>}</td>
@@ -105,6 +111,8 @@ export default function InventoryPage() {
         </div>
       </section>
 
+      {insights && <WasteCauses data={insights} />}
+
       <section className="card overflow-x-auto">
         <h3 className="section-title">입고 묶음별 사용기한</h3>
         <p className="hint mb-2">같은 재료도 들어온 날마다 사용기한이 다릅니다. 기한이 빠른 것부터 쓰고, 마지막 날 영업이 끝나면 남은 양은 버립니다.</p>
@@ -134,4 +142,40 @@ function Expiry({ left, warn }: { left: number; warn: number }) {
   if (left < 0) return <span className="badge badge-high">기한 지남</span>;
   if (left === 0) return <span className="badge badge-high">오늘까지</span>;
   return <span className={`badge ${left <= warn ? "badge-medium" : "badge-muted"}`}>{left}일 남음</span>;
+}
+
+/** 폐기 원인 — 발주로 줄일 수 있는 폐기(기한 경과)와 매장 운영으로 줄여야 하는 폐기를 구분 (팀 데이터 분석) */
+function WasteCauses({ data }: { data: Insights }) {
+  const total = data.wasteReasons.reduce((a, r) => a + r.waste_cost, 0);
+  const expiry = data.wasteReasons.find((r) => r.reason === "소비기한 경과");
+  const expiryShare = expiry ? expiry.waste_cost / total : 0;
+  return (
+    <section className="card">
+      <h3 className="section-title">폐기는 왜 생기나요?</h3>
+      <p className="hint mb-3">
+        데이터 분석 결과(전체 매장 1~9월) 폐기 비용 {won(total)} 중 <b>발주를 줄여서 막을 수 있는 건 사용기한 경과 {(expiryShare * 100).toFixed(0)}%</b>뿐입니다.
+        나머지 {((1 - expiryShare) * 100).toFixed(0)}%는 보관·품질·조리 문제라 발주량이 아니라 매장 운영으로 줄여야 합니다. 발주 추천은 이 중 사용기한 경과만 줄이도록 계산합니다.
+      </p>
+      <ul className="flex flex-col gap-2">
+        {data.wasteReasons.map((r) => {
+          const byOrder = r.reason === "소비기한 경과";
+          return (
+            <li key={r.reason} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3 text-sm">
+              <span>{r.reason}</span>
+              <span className="h-2.5 overflow-hidden rounded-full bg-[var(--surface-2)]" aria-hidden>
+                <span className="block h-full rounded-full" style={{ width: `${(r.waste_cost / total) * 100}%`, background: byOrder ? "var(--brand)" : "var(--border-strong)" }} />
+              </span>
+              <span className="tabular-nums">{won(r.waste_cost)} <span className="hint">{(r.cost_share * 100).toFixed(0)}% · {byOrder ? "발주로 개선" : "운영 관리"}</span></span>
+            </li>
+          );
+        })}
+      </ul>
+      {data.insights.length > 0 && (
+        <details className="mt-3 text-sm">
+          <summary className="cursor-pointer text-[var(--accent)]">분석 메모 보기</summary>
+          <ul className="mt-2 ml-4 list-disc space-y-1 text-[var(--muted)]">{data.insights.map((t, i) => <li key={i}>{t}</li>)}</ul>
+        </details>
+      )}
+    </section>
+  );
 }

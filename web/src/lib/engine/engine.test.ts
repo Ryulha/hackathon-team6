@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { Ingredient, Snapshot, Supplier } from "../types";
 import { addDays, parseList, parseWeekdays, shortDate, weekdayOf } from "./dates";
 import { runEngine } from "./index";
+import { planIngredient } from "./ordering";
 import { simulate } from "./lots";
 import { orderSlots } from "./schedule";
-import { DEFAULT_SETTINGS } from "./settings";
+import { DEFAULT_SETTINGS, OPT } from "./settings";
 import { daysOf, describeQty, priceAt, toOrderUnits } from "./units";
 
 const ing: Ingredient = {
@@ -77,55 +78,99 @@ describe("lots simulate", () => {
   });
 });
 
-function snapshot(stock: number): Snapshot {
+type DemandRow = Snapshot["demandHistory"][number];
+
+/** 판매 이력: 28일, 하루 qty 개(기본 10) — 메뉴 1개당 100g → 하루 1000g */
+const history = (asOf: string, qty: (i: number) => number = () => 10): DemandRow[] => Array.from({ length: 28 }, (_, i) => ({
+  date: addDays(asOf, -28 + i), store_id: "S1", menu_id: "M1", demand_qty: qty(i), qty: qty(i),
+  cancel_qty: 0, lost_qty: 0, sales_amount: 0, promo_flag: 0,
+}));
+
+function snapshot(stock: number, opt: { ing?: Partial<Ingredient>; hist?: DemandRow[]; stockouts?: string[] } = {}): Snapshot {
   const asOf = "2026-10-05";
-  const hist = Array.from({ length: 28 }, (_, i) => ({
-    date: addDays(asOf, -28 + i), store_id: "S1", menu_id: "M1", demand_qty: 10, qty: 10,
-    cancel_qty: 0, lost_qty: 0, sales_amount: 0, promo_flag: 0,
-  }));
+  const hist = opt.hist ?? history(asOf);
   return {
     meta: {
       asOf, storeId: "S1", dataStart: "2026-09-01", dataEnd: "2026-10-04", providedEnd: "2026-10-04", source: "json", fixture: true,
       overlay: { countedToday: [], estimated: false, uploadedThrough: null, masterEdits: [], priceEntries: 0, appOrders: 0 },
     },
     stores: [], menus: [{ menu_id: "M1", menu_name: "버거", category: "", is_set: 0, set_components: "", virtual_price: 5000 }],
-    ingredients: [ing], bom: [{ menu_id: "M1", ingredient_id: "I1", qty_per_menu: 100, use_unit: "g" }],
+    ingredients: [{ ...ing, ...opt.ing }], bom: [{ menu_id: "M1", ingredient_id: "I1", qty_per_menu: 100, use_unit: "g" }],
     suppliers: [sup], prices: [{ ingredient_id: "I1", valid_from: "2026-01-01", unit_price: 20000 }],
-    calendar: [], promotions: [], menuAvailability: [], demandHistory: hist, inventoryHistory: [],
+    calendar: [], promotions: [], menuAvailability: [], demandHistory: hist,
+    dailyTotals: hist.map((h) => ({ date: h.date, y: h.demand_qty - h.cancel_qty })), inventoryHistory: [],
     lots: stock ? [{ date: "2026-10-04", store_id: "S1", ingredient_id: "I1", lot_id: "L1", receipt_date: "2026-10-01", last_use_date: "2026-10-30", remaining_qty: stock, use_unit: "g" }] : [],
-    openOrders: [], recentStockouts: [], recentWaste: [],
+    openOrders: [],
+    recentStockouts: (opt.stockouts ?? []).map((date) => ({ date, store_id: "S1", ingredient_id: "I1", first_lost_hour: 12, affected_menus: "M1", report: "" })),
+    recentWaste: [],
   };
 }
 
-describe("runEngine", () => {
-  it("일 1000g 소요, 재고 2500g → 도착(10/8) 전 부족 → 긴급 알림", () => {
+describe("runEngine (팀 발주 최적화 규칙)", () => {
+  it("일 1000g, 재고 2500g → 도착(10/8) 전 부족 알림, 책임 기간(10/8~9) 2000g → 2팩", () => {
     const r = runEngine(snapshot(2500), DEFAULT_SETTINGS);
     const p = r.plans[0];
     expect(p.avgDailyNeed).toBeCloseTo(1000);
-    expect(p.slot?.arrivalDate).toBe("2026-10-08");
-    expect(p.nextSlot?.arrivalDate).toBe("2026-10-10");
-    expect(p.shortageBeforeArrival).toBeCloseTo(500); // 10/5,6,7 소요 3000 - 2500
+    expect([p.slot?.arrivalDate, p.nextSlot?.arrivalDate, p.windowDays]).toEqual(["2026-10-08", "2026-10-10", 2]);
+    expect(p.shortageBeforeArrival).toBeCloseTo(500); // 10/5~7 소요 3000 − 2500
     expect(r.alerts.some((a) => a.kind === "shortage")).toBe(true);
-    // 10/8~10/9 소요 2000 + 안전재고 1000 = 3000g → 3팩
-    expect(p.recommendedUnits).toBe(3);
-    expect(p.amount).toBe(60000);
+    expect(p.sigma).toBeCloseTo(0); // 판매가 매일 같으면 변동 0 → 안전재고 0
+    expect(p.recommendedUnits).toBe(2);
+    expect(p.amount).toBe(40000);
   });
   it("수요 +50% 조정 시 추천 수량 증가 (조건 변경 재계산)", () => {
     const base = runEngine(snapshot(6000), DEFAULT_SETTINGS).plans[0].recommendedUnits;
     const up = runEngine(snapshot(6000), { ...DEFAULT_SETTINGS, demandAdjustPct: 50 }).plans[0].recommendedUnits;
     expect(up).toBeGreaterThan(base);
   });
-  it("사용자 수정 수량 반영 + 최소 발주금액 판정", () => {
-    const r = runEngine(snapshot(2500), DEFAULT_SETTINGS, { I1: 1 });
-    expect(r.plans[0].finalUnits).toBe(1);
-    expect(r.plans[0].overridden).toBe(true);
-    expect(r.orders[0].belowMin).toBe(true);
-    expect(r.orders[0].minGap).toBe(30000);
+  it("품목 최소 발주수량 적용 (부족 500g → 1팩 → 최소 2팩)", () => {
+    expect(runEngine(snapshot(4500), DEFAULT_SETTINGS).plans[0].recommendedUnits).toBe(2);
   });
-  it("품목 최소 발주수량 적용", () => {
-    // 재고 충분해 안전재고만 부족 → 1팩 → min 2팩
-    const r = runEngine(snapshot(5500), DEFAULT_SETTINGS);
-    expect(r.plans[0].recommendedUnits).toBe(2);
+  it("최소 발주금액 미달: 급한 품목이 있으면 오래 가는 품목을 1단위씩 더 담는 안", () => {
+    const r = runEngine(snapshot(2500), DEFAULT_SETTINGS, { I1: 1 });
+    expect(r.plans[0].overridden).toBe(true);
+    const o = r.orders[0];
+    expect([o.belowMin, o.minGap]).toEqual([true, 30000]);
+    expect(o.fix?.urgent).toBe(true);
+    expect(o.fix?.adds[0].add).toBe(2); // 2만원 × 2 ≥ 3만원
+    expect(o.fix?.covers).toBe(true);
+  });
+  it("최소 발주금액 미달인데 급한 품목이 없으면 미루기 권장", () => {
+    const r = runEngine(snapshot(4500), DEFAULT_SETTINGS);
+    expect(r.orders[0].belowMin).toBe(true);
+    expect(r.orders[0].fix?.urgent).toBe(true); // 10/9 부족 예상 → 급함
+    const calm = runEngine(snapshot(20000), DEFAULT_SETTINGS, { I1: 1 });
+    expect(calm.orders[0].fix?.urgent).toBe(false);
+  });
+  it("z: 장기 품목은 최소 2.05, 최근 28일 품절이면 +0.36 (최대 2.33)", () => {
+    const longShelf = runEngine(snapshot(2500), DEFAULT_SETTINGS).plans[0];
+    expect(longShelf.zUsed).toBe(OPT.zLong);
+    expect(longShelf.zReasons).toHaveLength(1);
+    const withStockout = runEngine(snapshot(2500, { stockouts: ["2026-10-01", "2026-10-02"] }), DEFAULT_SETTINGS).plans[0];
+    expect(withStockout.zUsed).toBe(OPT.zMax);
+    expect(withStockout.stockouts28).toBe(2);
+    const old = runEngine(snapshot(2500, { stockouts: ["2026-08-01"] }), DEFAULT_SETTINGS).plans[0];
+    expect(old.stockouts28).toBe(0); // 28일 밖은 무시
+  });
+  it("판매가 들쭉날쭉하면 변동폭만큼 안전재고, 넉넉할수록 더 많이", () => {
+    const opt = { ing: { shelf_life_days: 5 }, hist: history("2026-10-05", (i) => (i % 2 ? 5 : 15)) };
+    const loose = runEngine(snapshot(6000, opt), { ...DEFAULT_SETTINGS, serviceLevel: "loose" }).plans[0];
+    const tight = runEngine(snapshot(6000, opt), { ...DEFAULT_SETTINGS, serviceLevel: "tight" }).plans[0];
+    expect(loose.sigma).toBeGreaterThan(0);
+    expect(loose.safetyStock).toBeCloseTo(2.05 * loose.sigma * Math.sqrt(3));
+    expect(loose.safetyStock).toBeGreaterThan(tight.safetyStock);
+    expect(loose.recBeforeCut).toBeGreaterThanOrEqual(tight.recBeforeCut);
+  });
+  it("폐기 고려 감량: 마지막 팩들이 기한 안에 못 쓰여 버려지면 품절이 안 늘 때까지 줄임", () => {
+    // 사용기한 2일, 1팩 1000g, 하루 1000g, 재고 0, 변동폭 677g → 안전재고 ≈1501g → 필요 3501g → 4팩
+    // 4팩이면 10/8~9 에 2000g 쓰고 2000g 폐기 → 3팩·2팩은 품절 그대로 폐기만 감소 → 1팩은 품절 증가 → 2팩
+    const s = snapshot(0, { ing: { shelf_life_days: 2, min_order_qty: 1 } });
+    const need = new Map(Array.from({ length: 30 }, (_, i) => [addDays("2026-10-05", i), 1000]));
+    const p = planIngredient(s, s.ingredients[0], need, DEFAULT_SETTINGS, { sigma: 677, stockouts28: 0 });
+    expect(p.zUsed).toBe(1.28);
+    expect(p.recBeforeCut).toBe(4);
+    expect(p.recommendedUnits).toBe(2);
+    expect([p.wasteBefore, p.wasteAfter]).toEqual([2000, 0]);
   });
 });
 

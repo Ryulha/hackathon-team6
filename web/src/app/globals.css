@@ -101,7 +101,7 @@ body {
     transition: background-color 150ms ease, color 150ms ease, transform 160ms var(--ease-out);
   }
   .tab:active { transform: scale(0.97); }
-  .tab[aria-selected="true"] { background: var(--surface); color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+  .tab:is([aria-selected="true"], [aria-checked="true"]) { background: var(--surface); color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
 
   .badge { @apply inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold leading-none whitespace-nowrap; }
   .badge-high { background: var(--high-soft); color: var(--high); }
