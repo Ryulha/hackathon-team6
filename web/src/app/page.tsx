@@ -240,7 +240,7 @@ function SupplierCard({ plans }: { plans: IngredientPlan[] }) {
                 </div>
                 <button className="btn-ghost text-xs" aria-expanded={open === id} onClick={() => setOpen(open === id ? null : id)}>{open === id ? "닫기" : "왜?"}</button>
               </div>
-              {open === id && <div className="mt-2"><Basis p={p} /></div>}
+              {open === id && <div className="mt-2 min-w-0"><Basis p={p} /></div>}
             </li>
           );
         })}

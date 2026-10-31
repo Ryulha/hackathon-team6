@@ -65,8 +65,8 @@ export function Basis({ p }: { p: IngredientPlan }) {
   const main = (q: number) => (q ? describeQty(q, ing).main : "—");
   const days = p.slot && p.nextSlot ? diffDays(p.nextSlot.arrivalDate, p.slot.arrivalDate) : 0;
   return (
-    <div className="grid gap-4 rounded-md bg-[var(--surface-2)] p-3 text-[13px] md:grid-cols-2">
-      <div>
+    <div className="grid min-w-0 gap-4 rounded-md bg-[var(--surface-2)] p-3 text-[13px] md:grid-cols-2">
+      <div className="min-w-0">
         <b>왜 {p.recommendedUnits}{ing.order_unit}인가요?</b>
         {p.slot && p.nextSlot ? (
           <ol className="mt-1 ml-4 flex list-decimal flex-col gap-1">
@@ -99,7 +99,7 @@ export function Basis({ p }: { p: IngredientPlan }) {
         )}
         {p.notes.length > 0 && <ul className="mt-2 ml-4 list-disc text-[var(--medium)]">{p.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
       </div>
-      <div>
+      <div className="min-w-0 overflow-x-auto">
         <b>다음 입고 전까지 재고 흐름 <span className="hint font-normal">(이 수량대로 발주했을 때 · 그 뒤는 다음 발주가 채움)</span></b>
         <table className="tbl mt-1 !text-xs">
           <thead><tr><th>날짜</th><th className="num">들어옴</th><th className="num">쓸 양</th><th className="num">모자람</th><th className="num">버림</th><th className="num">하루 끝 남은 양</th></tr></thead>
