@@ -189,7 +189,7 @@ function Guide() {
             <li><b>2.</b> <b>발주 추천</b>에서 품목별 추천 수량과 이유를 확인하고, 필요하면 수량을 고친 뒤 <b>발주 확정</b>을 누르세요.</li>
             <li><b>3.</b> 매일 영업 전 <b>데이터 입력 → 실사 재고</b>에 센 수량을 넣으면 추천이 더 정확해집니다.</li>
           </ol>
-          <p className="hint mt-2">왼쪽 <b>조건 설정</b>에서 매장·날짜·수요 증감을 바꾸면 모든 결과가 바로 다시 계산됩니다.</p>
+          <p className="hint mt-2">왼쪽에서 매장·날짜를 바꾸거나, <b>계산 기준</b> 메뉴에서 수요 증감·여유분 등을 바꾸면 모든 결과가 바로 다시 계산됩니다.</p>
         </div>
         <button className="btn-ghost shrink-0" onClick={close} aria-label="안내 닫기">닫기</button>
       </div>
