@@ -9,13 +9,18 @@ export type ForecastSettings = {
   demandAdjustPct: number;
   /** 행사 진행 가정: 과거 행사 때의 메뉴별 판매 배수를 예측에 곱한다 */
   applyPromo: boolean;
+  /** 다가오는 공휴일마다 점장이 고른 운영 방식 (없으면 auto) */
+  holidayPlan?: Record<string, HolidayMode>;
 };
 
-/** 데이터 기간(~9/30) 이후 공휴일 — 팀 엔진과 같은 가정 */
+/** auto: 이 매장 과거 공휴일 배수 적용 / weekday: 평일처럼 / closed: 영업 안 함(판매 0) */
+export type HolidayMode = "auto" | "weekday" | "closed";
+
+/** 공휴일 캘린더를 못 불러올 때 쓰는 데이터 기간(~9/30) 이후 공휴일 — 팀 엔진과 같은 가정 */
 export const EXTRA_HOLIDAYS: Record<string, string> = { "2026-10-03": "개천절", "2026-10-05": "대체공휴일", "2026-10-09": "한글날" };
 
-export function holidaySet(calendar: CalendarRow[]): Set<string> {
-  return new Set([...calendar.filter((c) => Number(c.is_holiday) === 1).map((c) => c.date), ...Object.keys(EXTRA_HOLIDAYS)]);
+export function holidaySet(calendar: CalendarRow[], extra: string[] = Object.keys(EXTRA_HOLIDAYS)): Set<string> {
+  return new Set([...calendar.filter((c) => Number(c.is_holiday) === 1).map((c) => c.date), ...extra]);
 }
 
 /** 판매 확정 기준 수요 = 품절 전 수요 − 취소 (품절이 없었다면 확정됐을 수량) */
@@ -121,7 +126,8 @@ export function forecastMenus(
     for (const d of dates) {
       const available = isAvailable(av, storeId, b.menuId, d);
       const holiday = ctx.holidays.has(d);
-      let qty = available ? b.level * ctx.dowIdx[weekdayOf(d)] * (holiday ? ctx.holMult : 1) : 0;
+      const mode = holiday ? s.holidayPlan?.[d] ?? "auto" : "weekday";
+      let qty = available && mode !== "closed" ? b.level * ctx.dowIdx[weekdayOf(d)] * (mode === "auto" ? ctx.holMult : 1) : 0;
       if (s.applyPromo && b.promoMult) qty *= b.promoMult;
       out.push({ date: d, menuId: b.menuId, qty: qty * adj, holiday, available });
     }

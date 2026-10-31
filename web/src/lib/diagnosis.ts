@@ -1,5 +1,5 @@
 // 슈퍼바이저 매장 진단 — 매장별 손익 지표와 '방문 전 확인할 것' (순수 함수, 테스트 가능)
-// 인건비는 제공 데이터에 없어 제외한다.
+// 관리 기준(현장 인터뷰): 식자재비율 매출의 30%, 인건비율 20%. 인건비는 제공 데이터에 없어 기준만 표시한다.
 
 export type Period = {
   sales: number;
@@ -15,17 +15,28 @@ export type Period = {
   emergencyAmount: number;
 };
 export type WasteCause = { ingredient: string; reason: string; cost: number };
-export type StoreInput = { storeId: string; storeName: string; cur: Period; prev: Period; wasteTop: WasteCause[]; emergencyItems: string[] };
+/** 식자재비를 많이 차지하는 품목과 단가 변화 (직전 기간 대비) */
+export type CostDriver = { ingredient: string; share: number; priceChange: number };
+export type StoreInput = {
+  storeId: string; storeName: string; cur: Period; prev: Period; wasteTop: WasteCause[]; emergencyItems: string[];
+  costTop?: CostDriver[];
+  /** 이 기간 다른 매장에서 재고를 받아 온 횟수 (매장 간 이동) */
+  transfersIn?: number;
+};
 
 /** 경고 기준 — 화면에 그대로 문장으로 보여준다 */
 export const RULES = {
-  foodRatioPp: 0.005, // 식자재비율: 다른 매장 평균·직전 기간보다 0.5%p 이상 높으면
+  foodRatioTarget: 0.3, // 식자재비율 관리 기준: 매출의 30% 이하
+  laborRatioTarget: 0.2, // 인건비율 관리 기준: 매출의 20% 이하 (인건비 데이터 없음)
+  foodRatioPp: 0.005, // 기준 이내여도 다른 매장 평균·직전 기간보다 0.5%p 이상 높으면
   wasteTimes: 1.5, // 폐기율: 다른 매장 평균·직전 기간의 1.5배 이상이면
 } as const;
 
 export type Flag = { key: "food" | "waste" | "emergency" | "lost"; text: string };
 export type StoreDiagnosis = StoreInput & {
   foodRatio: number;
+  /** 관리 기준(30%) 대비 초과분, 음수면 기준 이내 */
+  foodOverTarget: number;
   prevFoodRatio: number;
   othersFoodRatio: number;
   wasteRatio: number;
@@ -63,7 +74,11 @@ export function diagnose(stores: StoreInput[]): StoreDiagnosis[] {
 
     const foodVsOthers = foodRatio - othersFoodRatio;
     const foodVsPrev = foodRatio - prevFoodRatio;
-    if (others.length && foodVsOthers >= RULES.foodRatioPp) flags.push({ key: "food", text: `식자재비율 ${pct(foodRatio)} — 다른 매장 평균(${pct(othersFoodRatio)})보다 ${pp(foodVsOthers)} 높음` });
+    const foodOverTarget = foodRatio - RULES.foodRatioTarget;
+    const rel = (x: number) => `${x >= 0 ? "+" : "−"}${pp(Math.abs(x))}`;
+    if (s.cur.sales > 0 && foodOverTarget > 0) {
+      flags.push({ key: "food", text: `식자재비율 ${pct(foodRatio)} — 관리 기준 ${pct(RULES.foodRatioTarget, 0)}보다 ${pp(foodOverTarget)} 높음 (다른 매장 평균 대비 ${rel(foodVsOthers)}, 직전 기간 대비 ${rel(foodVsPrev)})` });
+    } else if (others.length && foodVsOthers >= RULES.foodRatioPp) flags.push({ key: "food", text: `식자재비율 ${pct(foodRatio)} — 다른 매장 평균(${pct(othersFoodRatio)})보다 ${pp(foodVsOthers)} 높음` });
     else if (s.prev.sales > 0 && foodVsPrev >= RULES.foodRatioPp) flags.push({ key: "food", text: `식자재비율 ${pct(foodRatio)} — 직전 기간(${pct(prevFoodRatio)})보다 ${pp(foodVsPrev)} 올라감` });
 
     if (s.cur.waste > 0) {
@@ -77,11 +92,19 @@ export function diagnose(stores: StoreInput[]): StoreDiagnosis[] {
     if (s.cur.lostQty > 0) flags.push({ key: "lost", text: `품절로 못 판 메뉴 ${s.cur.lostQty}개 (약 ${Math.round(s.cur.lostAmount).toLocaleString("ko-KR")}원)` });
 
     const actions: string[] = [];
+    const drivers = s.costTop ?? [];
+    if (flags.some((f) => f.key === "food") && drivers.length) {
+      const share = drivers.reduce((a, d) => a + d.share, 0);
+      const up = drivers.filter((d) => d.priceChange >= 0.01);
+      actions.push(`식자재비의 ${pct(share, 0)}가 ${drivers.map((d) => d.ingredient).join("·")}${up.length ? ` — ${up.map((d) => `${d.ingredient} 단가 +${pct(d.priceChange)}`).join(", ")}` : " (단가는 그대로)"} → 1인분 사용량(정량)·원가 높은 메뉴 판매 비중 확인`);
+    }
     if (flags.some((f) => f.key === "waste" || f.key === "food")) {
       for (const c of s.wasteTop.slice(0, 2)) actions.push((ACTION_BY_REASON[c.reason] ?? ((i: string) => `${i}: ${c.reason} 원인 확인`))(c.ingredient));
     }
     if (flags.some((f) => f.key === "food") && !s.wasteTop.length) actions.push("폐기가 아닌데 식자재비율이 오름 → 단가 변경·메뉴 구성(세트 비중) 확인");
-    if (flags.some((f) => f.key === "emergency" || f.key === "lost")) actions.push("품절·긴급발주 품목은 발주 여유분을 '넉넉하게'로, 품절이 난 시간대에 재고가 충분했는지 확인");
-    return { ...s, foodRatio, prevFoodRatio, othersFoodRatio, wasteRatio, prevWasteRatio, othersWasteRatio, flags, actions };
+    if (flags.some((f) => f.key === "emergency" || f.key === "lost")) {
+      actions.push(`품절·긴급발주 품목은 발주 여유분을 '넉넉하게'로${s.transfersIn ? `, 다른 매장에서 ${s.transfersIn}번 빌려 옴 → 상시 부족 품목인지 확인` : ""}. 급할 땐 긴급발주보다 다른 매장에서 배달대행으로 옮겨오기(본사 승인 불필요)`);
+    }
+    return { ...s, foodRatio, foodOverTarget, prevFoodRatio, othersFoodRatio, wasteRatio, prevWasteRatio, othersWasteRatio, flags, actions };
   });
 }

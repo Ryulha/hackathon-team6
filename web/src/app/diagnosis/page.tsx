@@ -32,7 +32,7 @@ export default function DiagnosisPage() {
 
   const d = data?.value;
   const loading = data?.weeks !== weeks;
-  const stores = d ? [...d.stores].sort((a, b) => b.flags.length - a.flags.length) : [];
+  const stores = d ? [...d.stores].sort((a, b) => b.flags.length - a.flags.length || b.foodOverTarget - a.foodOverTarget) : [];
   const flagged = stores.filter((s) => s.flags.length).length;
 
   return (
@@ -53,7 +53,7 @@ export default function DiagnosisPage() {
       {d && (
         <p className="text-sm">
           {flagged ? <><b className="text-[var(--high)]">{flagged}개 매장</b>에 방문 전 확인할 것이 있어요.</> : "모든 매장이 평소 수준이에요."}
-          <span className="hint ml-1">경고 기준: 식자재비율이 다른 매장 평균·직전 기간보다 {RULES.foodRatioPp * 100}%p 이상 높거나, 폐기율이 {RULES.wasteTimes}배 이상, 긴급발주·품절이 있을 때</span>
+          <span className="hint ml-1">경고 기준: 식자재비율이 관리 기준 {RULES.foodRatioTarget * 100}%를 넘거나 다른 매장 평균·직전 기간보다 {RULES.foodRatioPp * 100}%p 이상 높을 때, 폐기율이 {RULES.wasteTimes}배 이상, 긴급발주·품절이 있을 때</span>
         </p>
       )}
       {!d && !err && <div className="card h-40 animate-pulse" style={{ background: "var(--surface-2)" }} />}
@@ -68,12 +68,13 @@ export default function DiagnosisPage() {
 
             <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
               <Metric label="매출" value={eok(s.cur.sales)} sub={s.prev.sales ? `직전 대비 ${s.cur.sales >= s.prev.sales ? "+" : ""}${pct(s.cur.sales / s.prev.sales - 1, 0)}` : ""} />
-              <Metric label="식자재비율" value={pct(s.foodRatio)} warn={s.flags.some((f) => f.key === "food")}
+              <Metric label={`식자재비율 (기준 ${RULES.foodRatioTarget * 100}%)`} value={pct(s.foodRatio)} warn={s.flags.some((f) => f.key === "food")}
                 sub={`직전 ${pct(s.prevFoodRatio)} · 타매장 ${pct(s.othersFoodRatio)}`} />
+              <Metric label={`인건비율 (기준 ${RULES.laborRatioTarget * 100}%)`} value="자료 없음" sub="인건비 데이터가 제공되지 않음" />
               <Metric label="폐기율" value={pct(s.wasteRatio, 2)} warn={s.flags.some((f) => f.key === "waste")}
                 sub={`${Math.round(s.cur.waste).toLocaleString("ko-KR")}원 · 기한경과 ${s.cur.waste ? pct(s.cur.expiryWaste / s.cur.waste, 0) : "0%"}`} />
               <Metric label="품절·긴급발주" value={`${s.cur.lostQty}개 · ${s.cur.emergencyCount}회`} warn={s.flags.some((f) => f.key === "lost" || f.key === "emergency")}
-                sub={s.cur.lostAmount ? `못 판 금액 약 ${Math.round(s.cur.lostAmount).toLocaleString("ko-KR")}원` : "없음"} />
+                sub={`${s.cur.lostAmount ? `못 판 금액 약 ${Math.round(s.cur.lostAmount).toLocaleString("ko-KR")}원` : "품절 없음"}${s.transfersIn ? ` · 다른 매장서 ${s.transfersIn}번 빌려 옴` : ""}`} />
             </dl>
 
             {s.weekly.length > 1 && (
@@ -112,7 +113,7 @@ export default function DiagnosisPage() {
           </article>
         ))}
       </div>
-      <p className="hint">식자재비 = 실제 소진량 × 단가(팀 분석 결과), 식자재비율 = 식자재비 ÷ 매출. 인건비는 제공 데이터에 없어 제외했습니다. 합성 데이터 기준이라 실제 매장 성과와 무관합니다.</p>
+      <p className="hint">식자재비 = 실제 소진량 × 단가(팀 분석 결과), 식자재비율 = 식자재비 ÷ 매출. 관리 기준(식자재비율 30%, 인건비율 20%)은 현장 인터뷰 기준이며, 인건비는 제공 데이터에 없어 계산하지 않았습니다. 합성 데이터 기준이라 실제 매장 성과와 무관합니다.</p>
     </>
   );
 }

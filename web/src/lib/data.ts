@@ -6,6 +6,7 @@ import { db, sql } from "@/db/client";
 import { masterEdits, orderDrafts, priceEntries, salesDaily, stockCounts } from "@/db/schema";
 import { addDays } from "./engine/dates";
 import { dailyTotals } from "./engine/forecast";
+import { holidaysFor } from "./holidays";
 import {
   applyMasterEdits, draftArrivals, mergePrices, projectStartStock,
   type DraftLine, type MasterEdit, type PriceEntry, type StockCount, type SubmittedDraft,
@@ -141,6 +142,7 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
   ]);
 
   const allDemand = [...providedDemand, ...uploaded.filter((u) => u.date < asOf)];
+  const holidays = await holidaysFor(calendar, providedEnd);
   const { suppliers, ingredients, applied } = applyMasterEdits(rawSuppliers, rawIngredients, ov.masterEdits);
   const prices = mergePrices(rawPrices, ov.priceEntries);
   const appOrders = draftArrivals(ov.drafts, providedEnd, asOf);
@@ -160,7 +162,7 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
         priceEntries: ov.priceEntries.length, appOrders: appOrders.length,
       },
     },
-    stores, menus, ingredients, bom, suppliers, prices, calendar, promotions, menuAvailability,
+    stores, menus, ingredients, bom, suppliers, prices, calendar, holidays, promotions, menuAvailability,
     demandHistory: allDemand.filter((r) => r.date >= histFrom),
     dailyTotals: [...dailyTotals(allDemand, storeId)].map(([date, y]) => ({ date, y })).sort((a, b) => a.date.localeCompare(b.date)),
     inventoryHistory: inventoryHistory.sort((a, b) => a.date.localeCompare(b.date)),

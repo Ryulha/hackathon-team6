@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { timeLeft, won } from "@/components/format";
 import { Basis, MinFix, draftLine } from "@/components/order-parts";
 import { useInsights } from "@/components/use-insights";
+import { HolidayNote } from "@/components/holiday-note";
 import { WeekdayNote } from "@/components/weekday-note";
 import type { IngredientPlan } from "@/lib/engine";
 import { shortDate } from "@/lib/engine/dates";
@@ -18,6 +19,8 @@ import { useApp } from "@/state/app-state";
 export default function TodayPage() {
   const { result, snapshot, settings, overrides, completed } = useApp();
   const insights = useInsights(snapshot?.meta.storeId);
+  const urgentIds = result?.plans.filter((p) => p.shortageBeforeArrival > 0).map((p) => p.ingredient.ingredient_id) ?? [];
+  const transfers = useTransferOptions(urgentIds);
   if (!result || !snapshot) return null;
   const asOf = snapshot.meta.asOf;
 
@@ -43,12 +46,13 @@ export default function TodayPage() {
         <div>
           <p className="hint">{shortDate(asOf)} · 지금 {settings.nowTime}</p>
           <h2 className="mt-0.5 text-2xl font-bold tracking-[-0.02em]">오늘 주문</h2>
-          <WeekdayNote asOf={asOf} weekday={insights?.weekday} holiday={result.ctx.holidays.has(asOf) ? result.ctx.holMult : null} />
+          <WeekdayNote asOf={asOf} weekday={insights?.weekday} holiday={result.ctx.holidays.has(asOf) && (settings.holidayPlan?.[asOf] ?? "auto") === "auto" ? result.ctx.holMult : null} />
         </div>
         {cards.length > 0 && <Progress done={doneCount} total={cards.length} />}
       </header>
 
       <CheckSummary date={asOf} />
+      <HolidayNote />
 
       {urgent.length > 0 && (
         <div className="card flex flex-wrap items-start justify-between gap-2" style={{ borderColor: "var(--high)", background: "var(--high-soft)" }}>
@@ -56,10 +60,11 @@ export default function TodayPage() {
             <b className="text-[var(--high)]">⚠ 다음 입고 전에 떨어지는 품목이 있어요</b>
             <ul className="mt-1 space-y-0.5">
               {urgent.map((p) => (
-                <li key={p.ingredient.ingredient_id}><b>{p.ingredient.ingredient_name}</b> — {p.firstShortageDate && shortDate(p.firstShortageDate)}부터 {describeQty(p.shortageBeforeArrival, p.ingredient).main} 부족</li>
+                <li key={p.ingredient.ingredient_id}><b>{p.ingredient.ingredient_name}</b> — {p.firstShortageDate && shortDate(p.firstShortageDate)}부터 {describeQty(p.shortageBeforeArrival, p.ingredient).main} 부족
+                  <TransferHint plan={p} options={transfers?.options} /></li>
               ))}
             </ul>
-            <p className="hint mt-1">정기 주문으로는 늦어요. 긴급 발주(다음 날 07시 도착)나 다른 매장에서 옮겨오기를 검토하세요.</p>
+            <p className="hint mt-1">정기 주문으로는 늦어요. 다른 매장과 협의해 배달대행으로 옮겨오거나(본사 승인 필요 없음, 운송비는 배달대행 예치금) 긴급 발주(다음 날 07시 도착)를 하세요.{transfers?.asOf && ` 다른 매장 재고는 ${shortDate(transfers.asOf)} 마감 기준, 그 매장도 ${transfers.keepDays}일치는 남기는 양만 셌어요.`}</p>
           </div>
           <Link href="/inventory" className="btn">재고 보기</Link>
         </div>
@@ -90,6 +95,36 @@ export default function TodayPage() {
         )}
       </div>
     </>
+  );
+}
+
+type TransferOption = { ingredientId: string; storeName: string; spare: number };
+type Transfers = { asOf: string | null; keepDays: number; options: TransferOption[] };
+
+/** 부족 품목을 여유 있게 가진 다른 매장 (매장 간 이동 후보) */
+function useTransferOptions(ids: string[]) {
+  const key = ids.join(",");
+  const [data, setData] = useState<{ key: string; value: Transfers } | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    let alive = true;
+    fetch(`/api/transfers/options?ingredients=${key}`).then((r) => (r.ok ? r.json() : null))
+      .then((v) => { if (alive && v) setData({ key, value: v }); }).catch(() => {});
+    return () => { alive = false; };
+  }, [key]);
+  return data?.key === key ? data.value : null;
+}
+
+function TransferHint({ plan, options }: { plan: IngredientPlan; options?: TransferOption[] }) {
+  const best = options?.find((o) => o.ingredientId === plan.ingredient.ingredient_id);
+  if (!options) return null;
+  if (!best) return <span className="hint"> · 다른 매장도 여유 없음 → 긴급 발주</span>;
+  const enough = best.spare >= plan.shortageBeforeArrival;
+  return (
+    <span className="block text-[13px]">
+      ↳ <b>{best.storeName}</b>에 여유 {describeQty(best.spare, plan.ingredient).main}
+      {enough ? " — 옮겨오면 충분해요" : " — 일부만 채울 수 있어요"}
+    </span>
   );
 }
 

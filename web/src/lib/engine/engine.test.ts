@@ -97,7 +97,7 @@ function snapshot(stock: number, opt: { ing?: Partial<Ingredient>; hist?: Demand
     stores: [], menus: [{ menu_id: "M1", menu_name: "버거", category: "", is_set: 0, set_components: "", virtual_price: 5000 }],
     ingredients: [{ ...ing, ...opt.ing }], bom: [{ menu_id: "M1", ingredient_id: "I1", qty_per_menu: 100, use_unit: "g" }],
     suppliers: [sup], prices: [{ ingredient_id: "I1", valid_from: "2026-01-01", unit_price: 20000 }],
-    calendar: [], promotions: [], menuAvailability: [], demandHistory: hist,
+    calendar: [], holidays: [], promotions: [], menuAvailability: [], demandHistory: hist,
     dailyTotals: hist.map((h) => ({ date: h.date, y: h.demand_qty - h.cancel_qty })), inventoryHistory: [],
     lots: stock ? [{ date: "2026-10-04", store_id: "S1", ingredient_id: "I1", lot_id: "L1", receipt_date: "2026-10-01", last_use_date: "2026-10-30", remaining_qty: stock, use_unit: "g" }] : [],
     openOrders: [],

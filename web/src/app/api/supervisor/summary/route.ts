@@ -49,6 +49,15 @@ export async function GET(req: Request) {
     q(`SELECT i.store_id, count(*) FILTER (WHERE i.active) AS total, count(l.id) FILTER (WHERE i.active) AS done
        FROM app_check_items i LEFT JOIN app_check_logs l ON l.item_id = i.id AND l.date = $1 GROUP BY 1`, [addDays(end, 1)]).catch(() => [] as Row[]),
   ]);
+  // 식자재비 비중 상위 3품목과 단가 변화(사용단위당 원가, 직전 기간 대비) · 다른 매장에서 받아 온 이동 횟수
+  const [costRows, transfers] = await Promise.all([
+    q(`SELECT store_id, ingredient_name,
+         sum(consumed_cost) FILTER (WHERE date >= $1::date) AS cost,
+         sum(consumed_cost) FILTER (WHERE date >= $1::date) / NULLIF(sum(consumed_qty) FILTER (WHERE date >= $1::date), 0) AS unit_cur,
+         sum(consumed_cost) FILTER (WHERE date < $1::date) / NULLIF(sum(consumed_qty) FILTER (WHERE date < $1::date), 0) AS unit_prev
+       FROM ana_ingredient_daily WHERE date BETWEEN $2::date AND $3::date GROUP BY 1, 2`, args),
+    q(`SELECT to_store_id AS store_id, count(*) AS cnt FROM raw_transfers WHERE date BETWEEN $1::date AND $2::date GROUP BY 1`, [curFrom, end]),
+  ]);
   const weeklyFood = await q(`SELECT store_id, date_trunc('week', date)::date::text AS wk, sum(consumed_cost) AS food
     FROM ana_ingredient_daily WHERE date BETWEEN $1::date AND $2::date GROUP BY 1, 2`, [prevFrom, end]);
 
@@ -66,6 +75,15 @@ export async function GET(req: Request) {
       storeId: id, storeName: String(st.store_name), cur: period(id, "cur"), prev: period(id, "prev"),
       wasteTop: wasteTop.filter((r) => r.store_id === id).map((r) => ({ ingredient: String(r.ingredient_name), reason: String(r.reason), cost: n(r.cost) })),
       emergencyItems: emergItems.filter((r) => r.store_id === id).map((r) => String(r.ingredient_name)),
+      costTop: (() => {
+        const rows = costRows.filter((r) => r.store_id === id);
+        const total = rows.reduce((a, r) => a + n(r.cost), 0);
+        return rows.sort((a, b) => n(b.cost) - n(a.cost)).slice(0, 3).map((r) => ({
+          ingredient: String(r.ingredient_name), share: total ? n(r.cost) / total : 0,
+          priceChange: n(r.unit_prev) > 0 ? n(r.unit_cur) / n(r.unit_prev) - 1 : 0,
+        }));
+      })(),
+      transfersIn: n(transfers.find((r) => r.store_id === id)?.cnt),
     };
   });
   const result = diagnose(inputs).map((dg) => ({

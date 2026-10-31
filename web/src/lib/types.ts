@@ -20,6 +20,7 @@ export type Supplier = {
 };
 export type PriceRow = { ingredient_id: string; valid_from: string; /** 원/발주단위 */ unit_price: number };
 export type CalendarRow = { date: string; weekday: string; is_holiday: number; holiday_name: string };
+export type Holiday = { date: string; name: string; source: "data" | "calendar" | "assumed" };
 export type Promotion = {
   promo_id: string; store_id: string; start_date: string; end_date: string; promo_type: string; target_menu: string;
 };
@@ -81,6 +82,8 @@ export type Snapshot = {
   };
   stores: Store[]; menus: Menu[]; ingredients: Ingredient[]; bom: BomRow[]; suppliers: Supplier[];
   prices: PriceRow[]; calendar: CalendarRow[]; promotions: Promotion[]; menuAvailability: MenuAvailability[];
+  /** 공휴일: 제공 calendar + 그 이후는 대한민국 공휴일 캘린더(구글 공개 캘린더) 연동, 못 받으면 가정값 */
+  holidays: Holiday[];
   /** 기준일 전 lookback 기간 일별 수요 */
   demandHistory: DailyDemand[];
   /** 기준일 전 전체 기간 매장 일별 판매 합계(순수요 = 수요 − 취소) — 요일 지수·공휴일 배수 계산용 */
