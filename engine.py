@@ -21,17 +21,25 @@ EXTRA_HOLIDAYS = {"2026-10-03": "개천절", "2026-10-05": "대체공휴일", "2
 
 # 품절 위험 허용 수준 → 정규분포 z (서비스 수준)
 # [3] 튜닝 결과 반영 (3~8월 튜닝, 9월 검증): '보통' 2.6이 총비용 최소. 세 단계 순서 유지
-RISK_LEVELS = {"넉넉하게 (여유분 확대)": 3.0, "보통": 2.6, "타이트하게 (재고 최소)": 2.05}
+RISK_LEVELS = {"넉넉하게 (여유분 확대)": 3.5, "보통": 3.0, "타이트하게 (재고 최소)": 2.6}  # [3] 4차 튜닝(이동 반영)
 
 # [3] 최적화 설정
 SO_WINDOW = 28          # 품절 이력 조회 기간(일), 기준일 전날까지
 Z_BOOST = 0.0           # 최근 품절 품목의 z 상향폭. 튜닝 결과 효과 없음 → 0 (품절 이력은 화면 근거 표시용)
-Z_MAX = 3.0             # z 상한 ('넉넉하게'와 동일)
+Z_MAX = 4.0             # z 상한 ('넉넉하게'와 동일)
 WASTE_CUT_RATIO = 0.5   # 마지막 1발주단위 중 이 비율 이상이 폐기 예상이면 감량 (튜닝: 0.3/0.5/0.7 중 0.5)
 LONG_SHELF = 14         # 사용기한이 이 일수 이상이면 '장기 품목' (튜닝: 7/14/30 중 14)
 Z_LONG = 2.33           # 장기 품목 최소 z (튜닝: 1.64/2.05/2.33 중 2.33). '타이트하게'에서만 작동
 RECENT_DAYS = 7         # 최근 추세 반영 기간(일)
 RECENT_WEIGHT = 0.5     # 수요 수준 = 최근 7일 × w + 최근 28일 × (1−w) (튜닝: 0/0.3/0.5/0.7 중 0.5)
+
+# [3] 수요 급증 징후 대응: 최근 SURGE_LOOKBACK일 매장 수요(요일 보정)가 평소보다 SURGE_THRESHOLD배 이상이면
+#     앞으로 SURGE_DAYS일 예측을 1 + SURGE_GAIN × (비율 − 1)배로 올림 (상한 SURGE_CAP). GAIN 0이면 꺼짐
+SURGE_LOOKBACK = 2
+SURGE_THRESHOLD = 1.2
+SURGE_GAIN = 1.0        # [3] 4차 튜닝: 0/0.5/1.0/1.5/2.0 중 1.0
+SURGE_CAP = 2.0
+SURGE_DAYS = 3
 
 
 def _r(name):
@@ -162,6 +170,15 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
     dow = nonhol.groupby([WD[d.weekday()] for d in nonhol.index]).mean()
     dow_idx = (dow / dow.mean()).reindex(WD).fillna(1.0)
 
+    # [3] 수요 급증 징후: 최근 며칠 매장 수요(요일 보정, 공휴일 제외) ÷ 그 이전 평소 수준
+    adj = {d: v / dow_idx[WD[d.weekday()]] for d, v in tot.items() if d not in D.holidays}
+    rec_v = [adj[d] for d in (day - pd.Timedelta(days=k) for k in range(1, SURGE_LOOKBACK + 1)) if d in adj]
+    base_v = [v for d, v in adj.items() if day - pd.Timedelta(days=28) <= d < day - pd.Timedelta(days=SURGE_LOOKBACK)]
+    surge_ratio = (np.mean(rec_v) / np.mean(base_v)) if rec_v and base_v and np.mean(base_v) > 0 else 1.0
+    surge_mult = 1.0
+    if SURGE_GAIN > 0 and surge_ratio > SURGE_THRESHOLD:
+        surge_mult = min(1 + SURGE_GAIN * (surge_ratio - 1), SURGE_CAP)
+
     # 공휴일 배수: 전체 과거 공휴일 / 같은 요일 평일 평균
     allt = D.daily[(D.daily.store_id == store) & (D.daily.date < day)].groupby("date").y.sum()
     ratios = []
@@ -213,10 +230,13 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
                 f = level * dow_idx[wd(t)] * (hol_mult if t in D.holidays else 1.0)
                 if promo_on and m in promo_by_menu:
                     f *= promo_by_menu[m]
+                if k < SURGE_DAYS:
+                    f *= surge_mult  # [3] 급증 징후가 있으면 앞 며칠 예측 상향
             rows.append((m, t, f * (1 + demand_adj)))
     out = pd.DataFrame(rows, columns=["menu_id", "date", "f"])
     out.attrs.update(dow_idx=dow_idx.to_dict(), hol_mult=hol_mult, promo_mult=promo_mult,
-                     promo_mult_by_menu=promo_by_menu, recent_weight=RECENT_WEIGHT)
+                     promo_mult_by_menu=promo_by_menu, recent_weight=RECENT_WEIGHT,
+                     surge_ratio=float(surge_ratio), surge_mult=float(surge_mult))
     return out
 
 
@@ -366,7 +386,7 @@ def _arrivals_of(st, ing_id, shelf):
     return a
 
 
-def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 2.6, demand_adj: float = 0.0,
+def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 3.0, demand_adj: float = 0.0,
               promo_on: bool = False, horizon: int = 14,
               waste_aware: bool = True, stockout_boost: bool = True, shelf_tier: bool = True):
     """매장·기준일의 품목별 추천표와 상태를 반환.
@@ -375,6 +395,8 @@ def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 2.6, demand_adj
         shelf_tier: 사용기한 LONG_SHELF일 이상 품목은 z를 최소 Z_LONG으로 (과잉 비용이 낮은 품목은 넉넉히)"""
     st = store_state(D, store, day, demand_adj, promo_on, horizon)
     so_hist = st["so"]
+    surge_mult = st["fm"].attrs.get("surge_mult", 1.0)
+    surge_ratio = st["fm"].attrs.get("surge_ratio", 1.0)
     rows = []
     for _, it in D.ing.iterrows():
         s = D.sup.set_index("supplier_id").loc[it.supplier_id]
@@ -403,7 +425,7 @@ def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 2.6, demand_adj
         so_n = int(so_hist.stockout_28d.get(it.ingredient_id, 0)) if len(so_hist) else 0
         so_hour = so_hist.stockout_hour.get(it.ingredient_id) if len(so_hist) else None
         z_item = max(z, Z_LONG) if (shelf_tier and shelf >= LONG_SHELF) else z  # [3] 기한별 차등
-        z_used = min(z_item + Z_BOOST, Z_MAX) if (stockout_boost and so_n > 0) else z_item
+        z_used = max(z_item, min(z_item + Z_BOOST, Z_MAX)) if (stockout_boost and so_n > 0) else z_item
         ss = z_used * st["sig"].get(it.ingredient_id, 0) * math.sqrt(win + 1)  # 안전재고
         need = lost_window + max(0.0, ss - left_at_next)
         rec = 0
@@ -473,6 +495,7 @@ def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 2.6, demand_adj
             stockout_28d=so_n, stockout_hour=so_hour, z_used=z_used,
             rec_before=rec_before, waste_cut=rec_before - rec,
             waste_before=waste_before, waste_after=waste_after, adj_reason=adj_reason,
+            surge_ratio=round(surge_ratio, 2), surge_mult=round(surge_mult, 2),  # [3] 급증 징후
         ))
     df = pd.DataFrame(rows)
     df["amount"] = df.rec * df.price
@@ -534,7 +557,7 @@ def min_amount_fix(D: Data, df: pd.DataFrame, supplier_id: str, qty_col="rec"):
     return gap, urgent, plan
 
 
-def transfer_options(D: Data, store: str, day: pd.Timestamp, ing_id: str, short_qty: float, z=1.28):
+def transfer_options(D: Data, store: str, day: pd.Timestamp, ing_id: str, short_qty: float, z=3.0):  # [3] 위험 수준 '보통'과 일치
     """다른 매장 여유분 (다음 입고 전까지 자기 매장 필요량 + 안전재고를 뺀 사용가능 재고)."""
     out = []
     it = D.ing.set_index("ingredient_id").loc[ing_id]
