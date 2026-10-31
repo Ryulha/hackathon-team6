@@ -20,15 +20,18 @@ WD = ["월", "화", "수", "목", "금", "토", "일"]
 EXTRA_HOLIDAYS = {"2026-10-03": "개천절", "2026-10-05": "대체공휴일", "2026-10-09": "한글날"}
 
 # 품절 위험 허용 수준 → 정규분포 z (서비스 수준)
-RISK_LEVELS = {"넉넉하게 (여유분 확대)": 2.05, "보통": 1.28, "타이트하게 (재고 최소)": 0.67}
+# [3] 튜닝 결과 반영 (3~8월 튜닝, 9월 검증): '보통' 2.6이 총비용 최소. 세 단계 순서 유지
+RISK_LEVELS = {"넉넉하게 (여유분 확대)": 3.0, "보통": 2.6, "타이트하게 (재고 최소)": 2.05}
 
 # [3] 최적화 설정
 SO_WINDOW = 28          # 품절 이력 조회 기간(일), 기준일 전날까지
-Z_BOOST = 0.36          # 최근 품절 품목의 z 상향폭 (1.28→1.64 ≈ 서비스수준 90%→95%)
-Z_MAX = 2.33
-WASTE_CUT_RATIO = 0.5   # 마지막 1발주단위 중 이 비율 이상이 폐기 예상이면 감량
-LONG_SHELF = 14         # 사용기한이 이 일수 이상이면 '장기 품목'
-Z_LONG = 2.05           # 장기 품목 최소 z: 남아도 버릴 위험이 거의 없으니 품절 방지 우선
+Z_BOOST = 0.0           # 최근 품절 품목의 z 상향폭. 튜닝 결과 효과 없음 → 0 (품절 이력은 화면 근거 표시용)
+Z_MAX = 3.0             # z 상한 ('넉넉하게'와 동일)
+WASTE_CUT_RATIO = 0.5   # 마지막 1발주단위 중 이 비율 이상이 폐기 예상이면 감량 (튜닝: 0.3/0.5/0.7 중 0.5)
+LONG_SHELF = 14         # 사용기한이 이 일수 이상이면 '장기 품목' (튜닝: 7/14/30 중 14)
+Z_LONG = 2.33           # 장기 품목 최소 z (튜닝: 1.64/2.05/2.33 중 2.33). '타이트하게'에서만 작동
+RECENT_DAYS = 7         # 최근 추세 반영 기간(일)
+RECENT_WEIGHT = 0.5     # 수요 수준 = 최근 7일 × w + 최근 28일 × (1−w) (튜닝: 0/0.3/0.5/0.7 중 0.5)
 
 
 def _r(name):
@@ -149,6 +152,8 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
     """기준일 day부터 horizon일 동안 메뉴별 일 수요 예측. day 이전 데이터만 사용.
 
     예측 = 메뉴 수준(최근 28일, 요일효과 제거 평균) × 매장 요일지수 × (공휴일이면 공휴일 배수)
+    [3] 메뉴 수준 = 최근 7일 수준 × RECENT_WEIGHT + 최근 28일 수준 × (1 − RECENT_WEIGHT)
+        수요가 갑자기 오르내릴 때 28일 평균만으로는 늦게 따라가는 문제 보완
     """
     hist = D.daily[(D.daily.store_id == store) & (D.daily.date < day)]
     tot = hist.groupby("date").y.sum()
@@ -196,8 +201,8 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
         days = [day - pd.Timedelta(days=k) for k in range(1, 29)]
         days = [d for d in days if menu_available(D, store, m, d)]
         if days:
-            vals = np.array([r.get(d, 0) / dow_idx[wd(d)] for d in days], dtype=float)
-            level = vals.mean()
+            vals = np.array([r.get(d, 0) / dow_idx[wd(d)] for d in days], dtype=float)  # 최근 날짜부터
+            level = RECENT_WEIGHT * vals[:RECENT_DAYS].mean() + (1 - RECENT_WEIGHT) * vals.mean()
         else:
             level = 0.0
         for k in range(horizon):
@@ -211,7 +216,7 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
             rows.append((m, t, f * (1 + demand_adj)))
     out = pd.DataFrame(rows, columns=["menu_id", "date", "f"])
     out.attrs.update(dow_idx=dow_idx.to_dict(), hol_mult=hol_mult, promo_mult=promo_mult,
-                     promo_mult_by_menu=promo_by_menu)
+                     promo_mult_by_menu=promo_by_menu, recent_weight=RECENT_WEIGHT)
     return out
 
 
@@ -361,7 +366,7 @@ def _arrivals_of(st, ing_id, shelf):
     return a
 
 
-def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 1.28, demand_adj: float = 0.0,
+def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 2.6, demand_adj: float = 0.0,
               promo_on: bool = False, horizon: int = 14,
               waste_aware: bool = True, stockout_boost: bool = True, shelf_tier: bool = True):
     """매장·기준일의 품목별 추천표와 상태를 반환.
