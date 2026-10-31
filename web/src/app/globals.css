@@ -8,15 +8,20 @@
   --muted: #6a6a64;
   --border: #e2e1dc;
   --border-strong: #cfcec8;
-  --accent: #1d6b58;
-  --accent-soft: #e3f0ec;
+  /* 크라이치즈버거 브랜드 노랑 — 채움(버튼·활성 표시·오늘)에만. 위에 올리는 글자는 먹색 */
+  --brand: #ffcc00;
+  --on-brand: #1b1b19;
+  /* 흰 배경 위 글자·선용 진한 머스터드 (노랑 글자는 안 보임) — 대비 약 5:1 */
+  --accent: #8a6500;
+  --accent-soft: #fff6cc;
   --high: #b93a2e;
   --high-soft: #fbe9e6;
-  --medium: #a86c12;
-  --medium-soft: #fbf1df;
+  /* 경고는 브랜드 노랑과 헷갈리지 않게 주황 */
+  --medium: #c2410c;
+  --medium-soft: #ffedd5;
   --low: #3a67ad;
   --low-soft: #e6eefa;
-  --ring: color-mix(in srgb, var(--accent) 45%, transparent);
+  --ring: color-mix(in srgb, var(--brand) 70%, transparent);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --radius: 10px;
 }
@@ -30,12 +35,12 @@
     --muted: #9b9a93;
     --border: #2c2b28;
     --border-strong: #3b3a36;
-    --accent: #5cbfa4;
-    --accent-soft: #183630;
+    --accent: #ffd84d;
+    --accent-soft: #332a0a;
     --high: #ef7465;
     --high-soft: #3a1f1b;
-    --medium: #e2a64a;
-    --medium-soft: #3a2c15;
+    --medium: #fb923c;
+    --medium-soft: #3b2414;
     --low: #82a8e8;
     --low-soft: #1c2840;
   }
@@ -74,7 +79,7 @@ body {
     transition: transform 160ms var(--ease-out), background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
   .btn { @apply border; border-color: var(--border-strong); background: var(--surface); }
-  .btn-primary { @apply text-white; background: var(--accent); }
+  .btn-primary { color: var(--on-brand); background: var(--brand); }
   .btn-ghost { color: var(--muted); }
   .btn-danger { color: var(--high); }
   :is(.btn, .btn-primary, .btn-ghost, .btn-danger):active:not(:disabled) { transform: scale(0.97); }
@@ -82,7 +87,7 @@ body {
   :is(.btn, .btn-primary, .btn-ghost, .btn-danger):disabled { @apply cursor-not-allowed; opacity: 0.45; }
   @media (hover: hover) and (pointer: fine) {
     .btn:hover:not(:disabled) { background: var(--surface-2); }
-    .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, black); }
+    .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--brand) 88%, black); }
     .btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--foreground); }
     .btn-danger:hover:not(:disabled) { background: var(--high-soft); }
     .row-hover:hover { background: var(--surface-2); }
@@ -125,7 +130,10 @@ body {
     border-color: var(--border-strong); color: var(--muted);
     transition: border-color 150ms ease, background-color 150ms ease;
   }
-  .dropzone[data-over="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .dropzone[data-over="true"] { border-color: var(--brand); background: var(--accent-soft); color: var(--accent); }
+
+  /* 활성 메뉴: 노란 막대 + 연한 노랑 배경 */
+  .nav-active { background: var(--accent-soft) !important; color: var(--foreground) !important; box-shadow: inset 3px 0 0 var(--brand); font-weight: 600; }
 }
 
 @media (prefers-reduced-motion: reduce) {

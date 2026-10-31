@@ -62,7 +62,7 @@ export default function InventoryPage() {
               const next = p.nextIncoming;
               return (
                 <tr key={id} className="row-hover cursor-pointer" aria-selected={id === ing.ingredient_id}
-                  style={id === ing.ingredient_id ? { background: "var(--accent-soft)" } : undefined} onClick={() => setSel(id)}>
+                  style={id === ing.ingredient_id ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--brand)" } : undefined} onClick={() => setSel(id)}>
                   <td>{p.ingredient.ingredient_name}<div className="hint">{p.ingredient.storage}</div></td>
                   <td className="num"><Qty qty={p.onHand} ing={p.ingredient} /></td>
                   <td><DaysLeft days={days} risk={p.shortageBeforeArrival > 0} /></td>
@@ -93,11 +93,11 @@ export default function InventoryPage() {
               <Tooltip labelFormatter={(d) => shortDate(String(d))} formatter={(v) => `${Number(v).toLocaleString("ko-KR")}${unit}`}
                 contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <ReferenceLine x={asOf} stroke="var(--foreground)" strokeDasharray="2 2" label={{ value: "오늘", position: "top", fontSize: 11, fill: "var(--foreground)" }} />
+              <ReferenceLine x={asOf} stroke="var(--brand)" strokeWidth={2} label={{ value: "오늘", position: "top", fontSize: 11, fontWeight: 700, fill: "var(--foreground)" }} />
               {nextArrival && <ReferenceLine x={nextArrival} stroke="var(--muted)" strokeDasharray="2 2" label={{ value: "다음 입고", position: "top", fontSize: 11, fill: "var(--muted)" }} />}
               <ReferenceLine y={0} stroke="var(--high)" strokeOpacity={0.5} />
-              <Line name="남은 양 (실제)" dataKey="actualLeft" stroke="var(--accent)" strokeWidth={2} dot={false} />
-              <Line name="남은 양 (예상)" dataKey="planLeft" stroke="var(--accent)" strokeWidth={2} strokeDasharray="5 4" dot={false} />
+              <Line name="남은 양 (실제)" dataKey="actualLeft" stroke="var(--foreground)" strokeWidth={2} dot={false} />
+              <Line name="남은 양 (예상)" dataKey="planLeft" stroke="var(--foreground)" strokeWidth={2} strokeDasharray="5 4" dot={false} />
               <Line name="하루 사용량 (실제)" dataKey="actualUse" stroke="var(--muted)" dot={false} />
               <Line name="하루 사용량 (예상)" dataKey="planUse" stroke="var(--muted)" strokeDasharray="5 4" dot={false} />
             </LineChart>

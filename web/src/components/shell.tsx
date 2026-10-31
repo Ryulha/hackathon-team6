@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -23,7 +24,10 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="mx-auto flex max-w-[1400px] flex-col gap-4 p-4 lg:flex-row lg:gap-6 lg:p-6">
       <div className="flex flex-col gap-4 lg:sticky lg:top-6 lg:h-fit lg:w-64 lg:shrink-0">
         <div>
-          <h1 className="text-[17px] font-bold tracking-[-0.02em]">식자재 발주 도우미</h1>
+          <Link href="/" aria-label="대시보드로">
+            <Image src="/brand/crycheese-logo.webp" alt="크라이치즈버거" width={176} height={46} priority className="h-auto w-44" />
+          </Link>
+          <h1 className="mt-2 text-[15px] font-bold tracking-[-0.02em]">식자재 발주 도우미</h1>
           {snapshot && (
             <p className="hint mt-0.5">
               {snapshot.stores.find((s) => s.store_id === snapshot.meta.storeId)?.store_name} · 기준일 {snapshot.meta.asOf}
@@ -36,7 +40,7 @@ export function Shell({ children }: { children: ReactNode }) {
             const active = path === n.href;
             return (
               <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined}
-                className={`btn-ghost justify-start ${active ? "!bg-[var(--accent-soft)] !text-[var(--accent)]" : ""}`}>
+                className={`btn-ghost justify-start ${active ? "nav-active" : ""}`}>
                 {n.label}
               </Link>
             );

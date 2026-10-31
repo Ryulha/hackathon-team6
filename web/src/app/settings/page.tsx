@@ -27,7 +27,7 @@ export default function SettingsPage() {
   const num = (key: NumKey, label: string, unit: string, min: number, max: number, step: number, desc: ReactNode) => (
     <Control label={label} value={`${settings[key]}${unit}`} changed={settings[key] !== DEFAULT_SETTINGS[key]} desc={desc}
       defaultText={`기본 ${DEFAULT_SETTINGS[key]}${unit}`}>
-      <input type="range" className="w-full accent-[var(--accent)]" min={min} max={max} step={step} value={settings[key]}
+      <input type="range" className="w-full accent-[var(--brand)]" min={min} max={max} step={step} value={settings[key]}
         aria-label={label} onChange={(e) => setSettings({ [key]: Number(e.target.value) } as Partial<EngineSettings>)} />
     </Control>
   );
@@ -121,7 +121,7 @@ function PromoControl() {
         </span>
       </>}>
       <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
-        <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={settings.applyPromo} onChange={(e) => setSettings({ applyPromo: e.target.checked })} />
+        <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={settings.applyPromo} onChange={(e) => setSettings({ applyPromo: e.target.checked })} />
         행사 기간 수요 보정
       </label>
     </Control>

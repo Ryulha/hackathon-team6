@@ -153,8 +153,9 @@ function Task({ n, tone, title, desc, action, children }: {
   n: number; tone: "high" | "medium" | "low" | "accent"; title: string; desc: ReactNode; action: ReactNode; children?: ReactNode;
 }) {
   return (
-    <article className="card flex gap-3" style={{ borderLeft: `3px solid var(--${tone})` }}>
-      <span className={`badge badge-${tone} h-6 w-6 shrink-0 justify-center !rounded-full !p-0 text-xs`}>{n}</span>
+    <article className="card flex gap-3" style={{ borderLeft: `3px solid ${tone === "accent" ? "var(--brand)" : `var(--${tone})`}` }}>
+      <span className={`badge h-6 w-6 shrink-0 justify-center !rounded-full !p-0 text-xs ${tone === "accent" ? "" : `badge-${tone}`}`}
+        style={tone === "accent" ? { background: "var(--brand)", color: "var(--on-brand)" } : undefined}>{n}</span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
@@ -180,10 +181,10 @@ function Guide() {
   if (dismissed || closed) return null;
   const close = () => { setClosed(true); try { localStorage.setItem(GUIDE_KEY, "1"); } catch { /* 저장 불가 환경 무시 */ } };
   return (
-    <section className="card" style={{ background: "var(--accent-soft)", borderColor: "transparent" }}>
+    <section className="card" style={{ background: "var(--accent-soft)", borderColor: "var(--brand)" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-[var(--accent)]">처음 오셨나요? 이렇게 쓰면 됩니다</h3>
+          <h3 className="font-semibold">처음 오셨나요? 이렇게 쓰면 됩니다</h3>
           <ol className="mt-2 flex flex-col gap-1 text-sm">
             <li><b>1.</b> 아래 <b>오늘 할 일</b>을 위에서부터 처리하세요. 급한 일이 먼저 나옵니다.</li>
             <li><b>2.</b> <b>발주 추천</b>에서 품목별 추천 수량과 이유를 확인하고, 필요하면 수량을 고친 뒤 <b>발주 확정</b>을 누르세요.</li>

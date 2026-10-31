@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "식자재 발주 도우미",
+  title: "크라이치즈버거 · 식자재 발주 도우미",
   description: "재고·사용기한·공급사 조건을 반영한 발주 추천과 근거",
 };
 
