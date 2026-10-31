@@ -41,3 +41,7 @@ export function parseWeekdays(s: string): Set<Weekday> {
 export function parseList(s: string): string[] {
   return (s ?? "").replace(/[[\]"']/g, "").split(/[\s,|;/]+/).filter(Boolean);
 }
+
+/** '2026-10-02' → '10/2(금)' — 화면 문장용 짧은 날짜. ref 와 연도가 다르면 연도도 붙인다('2027/9/29(수)') */
+export const shortDate = (d: string, ref?: string) =>
+  `${ref && ref.slice(0, 4) !== d.slice(0, 4) ? `${d.slice(0, 4)}/` : ""}${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}(${weekdayOf(d)})`;

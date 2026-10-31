@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { fmt, won } from "@/components/format";
+import { Qty } from "@/components/qty";
 import { addDays } from "@/lib/engine/dates";
-import { priceAt } from "@/lib/engine/units";
+import { describeQty, priceAt } from "@/lib/engine/units";
 import { EDITABLE, SALES_COLUMNS } from "@/lib/overlays";
 import { useApp } from "@/state/app-state";
 
@@ -130,7 +131,7 @@ function CountsTab({ disabled }: { disabled: boolean }) {
       >
         <div className="overflow-x-auto">
           <table className="tbl">
-            <thead><tr><th>식자재</th><th>보관</th><th className="num">장부 재고</th><th>실사 수량</th><th className="num">차이</th></tr></thead>
+            <thead><tr><th>식자재</th><th>보관</th><th className="num">장부상 남은 양</th><th>직접 센 수량</th><th className="num">차이</th></tr></thead>
             <tbody>
               {snapshot!.ingredients.map((ing) => {
                 const id = ing.ingredient_id;
@@ -142,15 +143,16 @@ function CountsTab({ disabled }: { disabled: boolean }) {
                   <tr key={id} className="row-hover">
                     <td>{ing.ingredient_name} <span className="hint">{id}</span>{done && <span className="badge badge-accent ml-1.5">입력됨</span>}</td>
                     <td className="hint">{ing.storage}</td>
-                    <td className="num">{fmt(b)}{ing.use_unit}</td>
+                    <td className="num"><Qty qty={b} ing={ing} /></td>
                     <td>
                       <input inputMode="decimal" className="input w-28 text-right tabular-nums" placeholder={done ? fmt(done.countedQty) : "—"}
                         aria-invalid={invalid.has(id)} disabled={disabled} value={v}
                         onChange={(e) => setValues((s) => ({ ...s, [id]: e.target.value.replace(/,/g, "") }))} />
                       <span className="hint ml-1">{ing.use_unit}</span>
+                      {v.trim() !== "" && Number(v) > 0 && <div className="hint">= {describeQty(Number(v), ing).main}</div>}
                     </td>
                     <td className="num" style={{ color: diff && diff < 0 ? "var(--high)" : diff ? "var(--low)" : undefined }}>
-                      {diff === null ? "" : `${diff > 0 ? "+" : ""}${fmt(diff)}`}
+                      {diff === null ? "" : `${diff > 0 ? "+" : diff < 0 ? "−" : ""}${describeQty(Math.abs(diff), ing).main}`}
                     </td>
                   </tr>
                 );

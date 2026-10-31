@@ -11,8 +11,13 @@ export type IngredientPlan = {
   /** 이번 발주 / 다음 발주 기회 */
   slot: OrderSlot | undefined;
   nextSlot: OrderSlot | undefined;
+  /** 전날 영업 종료 후 재고 (오늘 입고 전) */
   startStock: number;
+  /** 지금 손에 있는 양 = 전날 마감 재고 + 오늘 07시 입고분. 발주 판단 시점(입고·실사 후)의 재고 */
+  onHand: number;
   incoming: SimArrival[];
+  /** 오늘 이후(내일부터) 도착할 첫 입고 */
+  nextIncoming: SimArrival | undefined;
   avgDailyNeed: number;
   /** 이번 발주가 책임질 기간 [도착일, 다음 발주 도착일) 의 소요량 */
   windowNeed: number;
@@ -124,6 +129,8 @@ export function planIngredient(
 
   return {
     ingredient: ing, supplier, slot, nextSlot, startStock, incoming, avgDailyNeed, windowNeed, safetyStock,
+    onHand: startStock + incoming.filter((a) => a.date === asOf).reduce((a, x) => a + x.qty, 0),
+    nextIncoming: incoming.filter((a) => a.date > asOf).sort((a, b) => a.date.localeCompare(b.date))[0],
     baseline, planned, recommendedUse, recommendedUnits, finalUnits, overridden,
     unitPrice, priceFrom: price?.valid_from ?? "-", amount: finalUnits * unitPrice,
     shortageBeforeArrival: shortBefore.reduce((a, d) => a + d.shortage, 0),

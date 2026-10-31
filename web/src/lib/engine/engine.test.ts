@@ -1,12 +1,12 @@
 // 손으로 만든 소형 픽스처(제공 데이터 아님)로 계산 규칙 검증
 import { describe, expect, it } from "vitest";
 import type { Ingredient, Snapshot, Supplier } from "../types";
-import { addDays, parseList, parseWeekdays, weekdayOf } from "./dates";
+import { addDays, parseList, parseWeekdays, shortDate, weekdayOf } from "./dates";
 import { runEngine } from "./index";
 import { simulate } from "./lots";
 import { orderSlots } from "./schedule";
 import { DEFAULT_SETTINGS } from "./settings";
-import { priceAt, toOrderUnits } from "./units";
+import { daysOf, describeQty, priceAt, toOrderUnits } from "./units";
 
 const ing: Ingredient = {
   ingredient_id: "I1", ingredient_name: "패티", supplier_id: "SP", use_unit: "g", order_unit: "팩",
@@ -126,5 +126,36 @@ describe("runEngine", () => {
     // 재고 충분해 안전재고만 부족 → 1팩 → min 2팩
     const r = runEngine(snapshot(5500), DEFAULT_SETTINGS);
     expect(r.plans[0].recommendedUnits).toBe(2);
+  });
+});
+
+describe("사람이 읽는 수량 표시", () => {
+  const lettuce: Ingredient = { ...ing, ingredient_name: "양상추", use_unit: "g", order_unit: "BOX", use_qty_per_order_unit: 5000 };
+  const patty: Ingredient = { ...ing, use_unit: "개", order_unit: "박스", use_qty_per_order_unit: 168 };
+  it("g 품목은 포장 단위가 주 표시, 원래 단위(kg)는 보조", () => {
+    expect(describeQty(11500, lettuce)).toEqual({ main: "2.3BOX", sub: "11.5kg" });
+    expect(describeQty(300, lettuce)).toEqual({ main: "0.1BOX 미만", sub: "300g" });
+  });
+  it("개 품목은 개수가 주 표시", () => {
+    expect(describeQty(1141, patty)).toEqual({ main: "1,141개", sub: "6.8박스" });
+  });
+  it("며칠 분량 / 짧은 날짜", () => {
+    expect(daysOf(1000, 400)).toBe(2.5);
+    expect(daysOf(10, 0)).toBe(Infinity);
+    expect(shortDate("2026-10-02")).toBe("10/2(금)");
+  });
+});
+
+describe("지금 남은 양 (발주 판단 시점)", () => {
+  it("전날 마감 재고 + 오늘 07시 입고분, 다음 입고는 내일 이후 것", () => {
+    const s = snapshot(2500);
+    s.openOrders = [
+      { po_line_id: "A", ingredient_id: "I1", supplier_id: "SP", order_date: "2026-10-04", expected_date: "2026-10-05", order_qty: 1, use_qty: 1000, order_type: "정기" },
+      { po_line_id: "B", ingredient_id: "I1", supplier_id: "SP", order_date: "2026-10-04", expected_date: "2026-10-07", order_qty: 2, use_qty: 2000, order_type: "정기" },
+    ];
+    const p = runEngine(s, DEFAULT_SETTINGS).plans[0];
+    expect(p.startStock).toBe(2500);
+    expect(p.onHand).toBe(3500);
+    expect(p.nextIncoming?.date).toBe("2026-10-07");
   });
 });
