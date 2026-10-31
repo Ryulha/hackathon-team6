@@ -226,3 +226,4 @@ data/raw/
 .DS_Store
 
 out/
+models/evaluated

@@ -18,6 +18,8 @@ tune.py — 발주 파라미터 튜닝 (3번 파트)
     z_boost     : 최근 품절 품목의 z 상향폭  (2차 튜닝에서 효과 없음 확인 → 0)
     recent_w    : 수요 예측에서 최근 7일 추세 가중치 (0 = 기존 28일 평균)  (3차 튜닝 0.5)
     surge_gain  : 수요 급증 징후 대응 강도 (0 = 끔)
+    forecast    : 수요 예측 출처 — engine(엔진 자체) / catboost(2번 모델, 앞 7일)
+                  ※ 2번 모델은 7월까지 학습 → 8월 이후 기준일만 공정 비교 가능. catboost 비교 시 --tune-start 2026-08-01
     ※ 기본으로 세 매장을 동시에 시뮬레이션하고 매장 간 이동을 반영 (--no-transfer로 끔)
 
 선택 규칙 (가정표에 기재):
@@ -41,12 +43,13 @@ import pandas as pd
 
 HOLD_RATE = 0.0007  # 재고 보유비용: 평균 재고금액의 일 0.07% (연 약 25%, 임의 가정 — --hold-rate로 변경)
 
-# 4차: 매장 간 이동 반영 후 z 재튜닝 + 급증 징후 대응 강도. 나머지는 1~3차 결과로 고정
-GRID = dict(z=[2.6, 3.0, 3.5, 4.0], z_long=[2.33], long_shelf=[14],
-            waste_ratio=[0.5], z_boost=[0.0], recent_w=[0.5], surge_gain=[1.0, 1.5, 2.0])
-QUICK = dict(z=[2.05, 2.6], z_long=[2.33], long_shelf=[14], waste_ratio=[0.5], z_boost=[0.0],
-             recent_w=[0.5], surge_gain=[0.0, 1.0])
-KEYS = ["z", "z_long", "long_shelf", "waste_ratio", "z_boost", "recent_w", "surge_gain"]
+# 5차: 2번 수요예측(CatBoost) 연결 비교. 예측 출처 × z × 급증 대응 강도
+GRID = dict(z=[2.6, 3.0, 3.5], z_long=[2.33], long_shelf=[14], waste_ratio=[0.5], z_boost=[0.0],
+            recent_w=[0.5], surge_gain=[0.0, 1.0], forecast=["engine", "catboost"])
+QUICK = dict(z=[3.0], z_long=[2.33], long_shelf=[14], waste_ratio=[0.5], z_boost=[0.0],
+             recent_w=[0.5], surge_gain=[1.0], forecast=["engine", "catboost"])
+KEYS = ["z", "z_long", "long_shelf", "waste_ratio", "z_boost", "recent_w", "surge_gain", "forecast"]
+ARTIFACT_DIR = "models/evaluated"   # 2번 모델 폴더 (--artifact-dir로 변경)
 
 _D = None
 
@@ -59,7 +62,7 @@ def _init():
 
 def _run(args):
     """한 조합 × 전 매장 × 한 기간 백테스트 (워커 프로세스에서 실행). 매장별 결과 리스트 반환"""
-    params, stores, start, end, hold_rate, transfers = args
+    params, stores, start, end, hold_rate, transfers, artifact_dir = args
     import engine as E
     import backtest as B
     if params is None:
@@ -68,6 +71,7 @@ def _run(args):
         E.Z_LONG, E.LONG_SHELF = params["z_long"], params["long_shelf"]
         E.WASTE_CUT_RATIO, E.Z_BOOST = params["waste_ratio"], params["z_boost"]
         E.RECENT_WEIGHT, E.SURGE_GAIN = params["recent_w"], params["surge_gain"]
+        E.FORECAST_SOURCE, E.FORECAST_ARTIFACT_DIR = params.get("forecast", "engine"), artifact_dir
         cfg = dict(z=params["z"], waste_aware=True, stockout_boost=True, shelf_tier=True)
     d, _, tr = B.run_all(_D, stores, pd.Timestamp(start), pd.Timestamp(end),
                          "replay" if cfg is None else "tune", cfg, transfers=transfers)
@@ -83,11 +87,11 @@ def _run(args):
     return out
 
 
-def evaluate(param_list, stores, start, end, jobs, hold_rate=HOLD_RATE, transfers=True):
+def evaluate(param_list, stores, start, end, jobs, hold_rate=HOLD_RATE, transfers=True, artifact_dir=ARTIFACT_DIR):
     if transfers:   # 매장을 묶어서 한 작업으로
-        tasks = [(p, stores, start, end, hold_rate, True) for p in param_list]
+        tasks = [(p, stores, start, end, hold_rate, True, artifact_dir) for p in param_list]
     else:           # 매장별로 쪼개서 병렬
-        tasks = [(p, [s], start, end, hold_rate, False) for p in param_list for s in stores]
+        tasks = [(p, [s], start, end, hold_rate, False, artifact_dir) for p in param_list for s in stores]
     with ProcessPoolExecutor(max_workers=jobs, initializer=_init) as ex:
         rows = [r for part in ex.map(_run, tasks) for r in part]
     df = pd.DataFrame(rows)
@@ -126,6 +130,7 @@ def main():
     ap.add_argument("--hold-rate", type=float, default=HOLD_RATE)
     ap.add_argument("--no-transfer", action="store_true", help="매장 간 이동 없이 (이전 방식)")
     ap.add_argument("--out", default="analysis")
+    ap.add_argument("--artifact-dir", default=ARTIFACT_DIR, help="2번 모델 폴더 (models/evaluated)")
     a = ap.parse_args()
 
     import engine as E
@@ -137,7 +142,7 @@ def main():
     t0 = time.time()
     tr = not a.no_transfer
     print(f"매장 간 이동: {'반영' if tr else '미반영'}")
-    res = evaluate([None] + combos, stores, a.tune_start, a.tune_end, a.jobs, a.hold_rate, tr)
+    res = evaluate([None] + combos, stores, a.tune_start, a.tune_end, a.jobs, a.hold_rate, tr, a.artifact_dir)
     print(f"튜닝 완료 {time.time() - t0:.0f}s")
     best, rp, rule = pick(res)
 
@@ -150,18 +155,19 @@ def main():
     print(f"\n선택 규칙: {rule}")
     print("선택 조합: " + ", ".join(f"{k}={best[k]}" for k in KEYS))
 
-    # 검증 기간: 선택 조합 vs 현재 기본값(2차) vs 실제 발주 재생
-    cur = dict(z=2.6, z_long=2.33, long_shelf=14, waste_ratio=0.5, z_boost=0.0, recent_w=0.5, surge_gain=0.0)
-    sel = {k: (int(best[k]) if k == "long_shelf" else float(best[k])) for k in KEYS}
+    # 검증 기간: 선택 조합 vs 현재 기본값(3차) vs 실제 발주 재생
+    cur = dict(z=3.0, z_long=2.33, long_shelf=14, waste_ratio=0.5, z_boost=0.0, recent_w=0.5, surge_gain=1.0,
+               forecast="engine")
+    sel = {k: (best[k] if k == "forecast" else int(best[k]) if k == "long_shelf" else float(best[k])) for k in KEYS}
     test_list = [None, cur] + ([sel] if sel != cur else [])
-    test = evaluate(test_list, stores, a.test_start, a.test_end, a.jobs, a.hold_rate, tr)
+    test = evaluate(test_list, stores, a.test_start, a.test_end, a.jobs, a.hold_rate, tr, a.artifact_dir)
     def _label(r):
         if r.policy == "replay":
             return "실제 과거 발주 재생"
         vals = tuple(getattr(r, k) for k in KEYS)
         is_sel = vals == tuple(sel[k] for k in KEYS)
         is_cur = vals == tuple(cur[k] for k in KEYS)
-        return "선택 조합 (= 현재 기본값)" if is_sel and is_cur else ("선택 조합" if is_sel else "현재 기본값(2차)")
+        return "선택 조합 (= 현재 기본값)" if is_sel and is_cur else ("선택 조합" if is_sel else "현재 기본값(3차)")
     test["label"] = [_label(r) for r in test.itertuples()]
     print(f"\n[검증 기간 {a.test_start} ~ {a.test_end}] 튜닝에 쓰지 않은 기간")
     print(_fmt(test[["label"] + show[1:]]).to_string(index=False))
@@ -171,7 +177,7 @@ def main():
     test.to_csv(Path(a.out) / "tune_best.csv", index=False, encoding="utf-8-sig")
     print(f"\n저장: {a.out}/tune_results.csv, {a.out}/tune_best.csv")
     print("※ 선택 조합이 검증 기간에서도 현재 기본값보다 총비용이 낮으면 engine.py 상수 교체:")
-    print("   RISK_LEVELS '보통'(z), Z_LONG, LONG_SHELF, WASTE_CUT_RATIO, Z_BOOST, RECENT_WEIGHT, SURGE_GAIN")
+    print("   RISK_LEVELS '보통'(z), Z_LONG, LONG_SHELF, WASTE_CUT_RATIO, Z_BOOST, RECENT_WEIGHT, SURGE_GAIN, FORECAST_SOURCE")
 
 
 if __name__ == "__main__":

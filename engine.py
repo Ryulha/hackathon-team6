@@ -41,6 +41,15 @@ SURGE_GAIN = 1.0        # [3] 4차 튜닝: 0/0.5/1.0/1.5/2.0 중 1.0
 SURGE_CAP = 2.0
 SURGE_DAYS = 3
 
+# [3] 2번 수요예측(CatBoost) 연결
+#   FORECAST_SOURCE = "catboost": 앞 7일은 2번 모델 예측(pred_net_qty = 잠재수요 × (1 − 취소율)),
+#                                 8~14일은 엔진 자체 예측으로 이어 붙임 (2번 모델은 최대 7일)
+#   2번 모델을 쓸 수 없는 날(모델 학습 기간 이전·달력 밖·모델 파일 없음)은 자동으로 엔진 예측으로 대체
+#   준비: pip install -e <2번 저장소(data_cry)>  +  2번의 models/evaluated 폴더
+FORECAST_SOURCE = "engine"            # "engine" 또는 "catboost"
+FORECAST_ARTIFACT_DIR = "models/evaluated"   # 2번 학습 모델 폴더 (selection.json, catboost/)
+_CB = {"predictor": None, "error": None, "cache": {}}
+
 
 def _r(name):
     return pd.read_csv(DATA / name, encoding="utf-8-sig")
@@ -155,6 +164,34 @@ def menu_available(D: Data, store: str, menu: str, t: pd.Timestamp) -> bool:
 
 
 # ───────────────────────── 수요 예측 ─────────────────────────
+def _catboost_net(D: Data, store: str, day: pd.Timestamp):
+    """[3] 2번 CatBoost 7일 예측 (메뉴별 pred_net_qty). 실패하면 (None, 사유)"""
+    if _CB["predictor"] is None and _CB["error"] is None:
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent / "src"))  # 2번 src/forecast
+            from forecast import Predictor  # 2번 패키지
+            _CB["predictor"] = Predictor.from_artifacts(data_dir=str(DATA), artifact_dir=FORECAST_ARTIFACT_DIR)
+        except Exception as e:  # noqa: BLE001
+            _CB["error"] = f"2번 모델 로드 실패: {type(e).__name__}: {e}"
+    if _CB["predictor"] is None:
+        return None, _CB["error"]
+    key = pd.Timestamp(day)
+    if key not in _CB["cache"]:
+        try:  # 매장 전체를 한 번에 예측해 날짜별로 캐시
+            res = _CB["predictor"].predict_demand(key, forecast_days=7)
+            m = res.menus[["store_id", "menu_id", "target_date", "pred_net_qty"]].copy()
+            m["target_date"] = pd.to_datetime(m["target_date"])
+            _CB["cache"][key] = m
+        except Exception as e:  # noqa: BLE001
+            _CB["cache"][key] = f"{type(e).__name__}: {e}"
+    m = _CB["cache"][key]
+    if isinstance(m, str):
+        return None, m
+    m = m[m.store_id == store]
+    return {(r.menu_id, r.target_date): float(r.pred_net_qty) for r in m.itertuples()}, None
+
+
 def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_adj: float = 0.0,
                    promo_on: bool = False) -> pd.DataFrame:
     """기준일 day부터 horizon일 동안 메뉴별 일 수요 예측. day 이전 데이터만 사용.
@@ -210,6 +247,13 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
         if promo_by_menu:
             promo_mult = float(np.median(list(promo_by_menu.values())))
 
+    # [3] 2번 CatBoost 예측 (앞 7일). 실패 시 엔진 예측 그대로
+    cb, cb_err = (None, None)
+    if FORECAST_SOURCE == "catboost":
+        cb, cb_err = _catboost_net(D, store, day)
+    forecast_source = "catboost(1~7일)+engine(8일~)" if cb is not None else (
+        "engine" if FORECAST_SOURCE != "catboost" else f"engine (2번 모델 대체: {cb_err})")
+
     rows = []
     recent = hist[hist.date >= day - pd.Timedelta(days=28)]
     for m in D.menus.menu_id:
@@ -227,7 +271,10 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
             if not menu_available(D, store, m, t):
                 f = 0.0
             else:
-                f = level * dow_idx[wd(t)] * (hol_mult if t in D.holidays else 1.0)
+                if cb is not None and (m, t) in cb:
+                    f = cb[(m, t)]  # [3] 2번 모델: 요일·공휴일·행사 일정은 모델 Feature에 이미 반영
+                else:
+                    f = level * dow_idx[wd(t)] * (hol_mult if t in D.holidays else 1.0)
                 if promo_on and m in promo_by_menu:
                     f *= promo_by_menu[m]
                 if k < SURGE_DAYS:
@@ -236,7 +283,8 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
     out = pd.DataFrame(rows, columns=["menu_id", "date", "f"])
     out.attrs.update(dow_idx=dow_idx.to_dict(), hol_mult=hol_mult, promo_mult=promo_mult,
                      promo_mult_by_menu=promo_by_menu, recent_weight=RECENT_WEIGHT,
-                     surge_ratio=float(surge_ratio), surge_mult=float(surge_mult))
+                     surge_ratio=float(surge_ratio), surge_mult=float(surge_mult),
+                     forecast_source=forecast_source)
     return out
 
 
@@ -397,6 +445,7 @@ def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 3.0, demand_adj
     so_hist = st["so"]
     surge_mult = st["fm"].attrs.get("surge_mult", 1.0)
     surge_ratio = st["fm"].attrs.get("surge_ratio", 1.0)
+    forecast_source = st["fm"].attrs.get("forecast_source", "engine")
     rows = []
     for _, it in D.ing.iterrows():
         s = D.sup.set_index("supplier_id").loc[it.supplier_id]
@@ -496,6 +545,7 @@ def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 3.0, demand_adj
             rec_before=rec_before, waste_cut=rec_before - rec,
             waste_before=waste_before, waste_after=waste_after, adj_reason=adj_reason,
             surge_ratio=round(surge_ratio, 2), surge_mult=round(surge_mult, 2),  # [3] 급증 징후
+            forecast_source=forecast_source,  # [3] 예측 출처 (engine / catboost)
         ))
     df = pd.DataFrame(rows)
     df["amount"] = df.rec * df.price

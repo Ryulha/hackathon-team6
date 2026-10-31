@@ -330,8 +330,15 @@ def main():
     ap.add_argument("--configs", nargs="*", default=list(CONFIGS))
     ap.add_argument("--out", default="analysis")
     ap.add_argument("--no-transfer", action="store_true", help="매장 간 이동 없이 (이전 방식)")
+    ap.add_argument("--forecast", choices=["engine", "catboost"], default=None, help="수요 예측 출처 (기본: engine.py 설정)")
+    ap.add_argument("--artifact-dir", default=None, help="2번 모델 폴더 (models/evaluated)")
     a = ap.parse_args()
 
+    if a.forecast:
+        E.FORECAST_SOURCE = a.forecast
+    if a.artifact_dir:
+        E.FORECAST_ARTIFACT_DIR = a.artifact_dir
+    print(f"수요 예측 출처: {E.FORECAST_SOURCE}")
     D = E.load()
     start, end = pd.Timestamp(a.start), pd.Timestamp(a.end)
     stores = a.stores or D.stores.store_id.tolist()
