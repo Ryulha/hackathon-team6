@@ -50,7 +50,9 @@ export function MinFix({ o, setOverride }: { o: SupplierOrder; setOverride: (id:
 }
 
 export function Basis({ p }: { p: IngredientPlan }) {
-  const { snapshot, settings } = useApp();
+  const { snapshot, settings, result } = useApp();
+  const mlDays = new Set(result?.forecast.filter((f) => f.source === "ml").map((f) => f.date)).size;
+  const surge = result && result.ctx.surgeMult > 1 ? result.ctx : null;
   const insights = useInsights(snapshot?.meta.storeId);
   const ing = p.ingredient;
   // 포장 단위 경고: 1박스가 며칠치인지 vs 사용기한 (분석: 양상추 1박스가 매장마다 0.45~1.29일치)
@@ -69,7 +71,7 @@ export function Basis({ p }: { p: IngredientPlan }) {
           <ol className="mt-1 ml-4 flex list-decimal flex-col gap-1">
             <li>이번 발주는 <b>{shortDate(p.slot.arrivalDate)}</b>에 도착하고, 그다음 발주는 <b>{shortDate(p.nextSlot.arrivalDate)}</b>에 도착합니다. 그 사이 <b>{days}일</b>을 버텨야 합니다.
               {p.slot.shiftedDays > 0 && <span className="hint"> (입고 가능 요일에 맞춰 {p.slot.shiftedDays}일 늦게 도착)</span>}</li>
-            <li>그 {days}일 동안 쓸 양은 <b>{fmtQty(p.windowNeed, ing)}</b>로 예상합니다. 최근 {settings.lookbackWeeks}주 판매 수준 × 요일별 차이 × 공휴일 효과 × 메뉴별 사용량(BOM)으로 계산했습니다{settings.demandAdjustPct ? ` (수요 ${settings.demandAdjustPct > 0 ? "+" : ""}${settings.demandAdjustPct}% 반영)` : ""}{settings.applyPromo ? " (행사 진행 가정)" : ""}.</li>
+            <li>그 {days}일 동안 쓸 양은 <b>{fmtQty(p.windowNeed, ing)}</b>로 예상합니다. {mlDays > 0 ? `앞 ${mlDays}일은 AI 수요예측(팀 CatBoost 모델), 그 뒤는 ` : ""}최근 {settings.lookbackWeeks}주 판매 수준(최근 7일을 절반 반영) × 요일별 차이 × 공휴일 효과에 메뉴별 사용량(BOM)을 곱해 계산했습니다{surge && mlDays === 0 ? ` · 최근 2일 판매가 평소의 ${surge.surgeRatio.toFixed(2)}배라 앞 3일은 ×${surge.surgeMult.toFixed(2)}` : ""}{settings.demandAdjustPct ? ` (수요 ${settings.demandAdjustPct > 0 ? "+" : ""}${settings.demandAdjustPct}% 반영)` : ""}{settings.applyPromo ? " (행사 진행 가정)" : ""}.</li>
             <li>하루 사용량이 예측에서 평소 <b>±{fmtQty(p.sigma, ing)}</b> 정도 벗어나서, &lsquo;{SERVICE_LEVELS[settings.serviceLevel].label}&rsquo; 기준으로 여유분 <b>{fmtQty(p.safetyStock, ing)}</b>를 더 잡았습니다.
               {p.zReasons.length > 0 && <span className="hint"> ({p.zReasons.join(", ")})</span>}</li>
             <li>지금 재고, 들어올 물량, 사용기한이 지나 버릴 양을 날짜별로 따져 보면 <b>{fmtQty(p.recommendedUse, ing)}</b>가 더 필요합니다.</li>

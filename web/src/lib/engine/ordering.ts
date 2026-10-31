@@ -125,8 +125,8 @@ export function planIngredient(
     zUsed = OPT.zLong;
     zReasons.push(`사용기한 ${ing.shelf_life_days}일인 장기 품목이라 남아도 버릴 위험이 낮아 넉넉히`);
   }
-  if (sig.stockouts28 > 0) {
-    zUsed = Math.min(zUsed + OPT.zBoost, OPT.zMax);
+  if (sig.stockouts28 > 0 && OPT.zBoost > 0) {
+    zUsed = Math.max(zUsed, Math.min(zUsed + OPT.zBoost, OPT.zMax));
     zReasons.push(`최근 ${OPT.stockoutWindow}일 동안 ${sig.stockouts28}번 품절돼서 더 넉넉히`);
   }
   const safetyStock = zUsed * sig.sigma * Math.sqrt(windowDays + 1);

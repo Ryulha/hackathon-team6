@@ -142,7 +142,7 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
   ]);
 
   const allDemand = [...providedDemand, ...uploaded.filter((u) => u.date < asOf)];
-  const holidays = await holidaysFor(calendar, providedEnd);
+  const [holidays, ml] = await Promise.all([holidaysFor(calendar, providedEnd), src.name === "db" ? mlForecastFor(storeId, asOf) : Promise.resolve(NO_ML)]);
   const { suppliers, ingredients, applied } = applyMasterEdits(rawSuppliers, rawIngredients, ov.masterEdits);
   const prices = mergePrices(rawPrices, ov.priceEntries);
   const appOrders = draftArrivals(ov.drafts, providedEnd, asOf);
@@ -163,11 +163,27 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
       },
     },
     stores, menus, ingredients, bom, suppliers, prices, calendar, holidays, promotions, menuAvailability,
+    mlForecast: ml.rows, mlModel: ml.model,
     demandHistory: allDemand.filter((r) => r.date >= histFrom),
     dailyTotals: [...dailyTotals(allDemand, storeId)].map(([date, y]) => ({ date, y })).sort((a, b) => a.date.localeCompare(b.date)),
     inventoryHistory: inventoryHistory.sort((a, b) => a.date.localeCompare(b.date)),
     lots: projected.lots, openOrders: projected.openOrders, recentStockouts, recentWaste,
   };
+}
+
+const NO_ML = { rows: [] as Snapshot["mlForecast"], model: null as string | null };
+
+/** 팀 CatBoost 예측(pipeline/ml_forecast.py 가 적재) — 이 기준일에 만든 7일 예측. 표가 없으면 빈 값(규칙 기반으로 계산) */
+async function mlForecastFor(storeId: string, asOf: string) {
+  try {
+    const rows = (await sql!.query(
+      `SELECT date::text AS date, menu_id, pred_net_qty, model FROM ana_ml_forecast WHERE store_id = $1 AND origin = $2::date`,
+      [storeId, asOf],
+    )) as { date: string; menu_id: string; pred_net_qty: number; model: string }[];
+    return { rows: rows.map((r) => ({ date: r.date, menuId: r.menu_id, qty: Number(r.pred_net_qty) })), model: rows[0]?.model ?? null };
+  } catch {
+    return NO_ML;
+  }
 }
 
 /**

@@ -82,6 +82,10 @@ export type Snapshot = {
   };
   stores: Store[]; menus: Menu[]; ingredients: Ingredient[]; bom: BomRow[]; suppliers: Supplier[];
   prices: PriceRow[]; calendar: CalendarRow[]; promotions: Promotion[]; menuAvailability: MenuAvailability[];
+  /** 팀 CatBoost 7일 예측(기준일이 예측해 둔 날일 때만) — 판매 확정량(취소 반영) */
+  mlForecast: { date: string; menuId: string; qty: number }[];
+  /** 위 예측을 만든 모델 (예: upto_0930 = 9/30까지 판매로 학습) */
+  mlModel: string | null;
   /** 공휴일: 제공 calendar + 그 이후는 대한민국 공휴일 캘린더(구글 공개 캘린더) 연동, 못 받으면 가정값 */
   holidays: Holiday[];
   /** 기준일 전 lookback 기간 일별 수요 */

@@ -14,7 +14,7 @@ describe("공휴일 캘린더", () => {
 });
 
 describe("공휴일 운영 방식", () => {
-  const ctx: ForecastContext = { dowIdx: { 월: 1, 화: 1, 수: 1, 목: 1, 금: 1, 토: 1, 일: 1 }, holMult: 1.5, holidays: new Set(["2026-10-09"]) };
+  const ctx: ForecastContext = { dowIdx: { 월: 1, 화: 1, 수: 1, 목: 1, 금: 1, 토: 1, 일: 1 }, holMult: 1.5, holidays: new Set(["2026-10-09"]), surgeRatio: 1, surgeMult: 1 };
   const basis = [{ menuId: "M1", level: 10, sampleDays: 28 }];
   const qty = (mode?: "auto" | "weekday" | "closed") =>
     forecastMenus(basis, [], "S01", ["2026-10-08", "2026-10-09"], ctx, { ...DEFAULT_SETTINGS, holidayPlan: mode ? { "2026-10-09": mode } : undefined }).map((f) => f.qty);
