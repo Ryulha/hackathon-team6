@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { timeLeft, won } from "@/components/format";
 import { Basis, MinFix, draftLine } from "@/components/order-parts";
 import { useInsights } from "@/components/use-insights";
@@ -48,6 +48,8 @@ export default function TodayPage() {
         {cards.length > 0 && <Progress done={doneCount} total={cards.length} />}
       </header>
 
+      <CheckSummary date={asOf} />
+
       {urgent.length > 0 && (
         <div className="card flex flex-wrap items-start justify-between gap-2" style={{ borderColor: "var(--high)", background: "var(--high-soft)" }}>
           <div className="text-sm">
@@ -88,6 +90,29 @@ export default function TodayPage() {
         )}
       </div>
     </>
+  );
+}
+
+/** 점장용: 직원 점검 진행 한 줄 — 누르면 점검표 */
+function CheckSummary({ date }: { date: string }) {
+  const [d, setD] = useState<{ total: number; done: number; left: string[] } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/checks?date=${date}`).then((r) => (r.ok ? r.json() : null)).then((v) => {
+      if (!alive || !v) return;
+      const items = (v.items as { id: number; name: string; slot: string; active: boolean }[]).filter((i) => i.active);
+      const doneIds = new Set((v.logs as { itemId: number }[]).map((l) => l.itemId));
+      const slot: Record<string, string> = { open: "오픈", lunch: "점심", close: "마감" };
+      setD({ total: items.length, done: items.filter((i) => doneIds.has(i.id)).length, left: items.filter((i) => !doneIds.has(i.id)).map((i) => `${slot[i.slot]} ${i.name}`) });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [date]);
+  if (!d || !d.total) return null;
+  return (
+    <Link href="/checks" className="card flex items-center justify-between gap-2 !py-2.5 text-sm hover:bg-[var(--surface-2)]">
+      <span><b>오늘 점검 {d.done}/{d.total} 완료</b>{d.left.length > 0 && <span className="hint"> · 남은 것: {d.left.slice(0, 3).join(", ")}{d.left.length > 3 && ` 외 ${d.left.length - 3}개`}</span>}</span>
+      <span aria-hidden className="text-[var(--muted)]">→</span>
+    </Link>
   );
 }
 

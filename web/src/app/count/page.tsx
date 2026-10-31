@@ -23,7 +23,7 @@ const DIFF_RATIO = 0.3;
  * 저장은 기존 실사 입력(/api/inputs/counts)과 같고, 저장하면 오늘 주문 추천이 바로 다시 계산된다.
  */
 export default function CountPage() {
-  const { snapshot, setAsOf, reload } = useApp();
+  const { snapshot, setAsOf, reload, me } = useApp();
   const [idx, setIdx] = useState(0);
   const [values, setValues] = useState<Record<string, number>>({});
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
@@ -94,8 +94,8 @@ export default function CountPage() {
       <section className="card flex flex-col items-start gap-3">
         <span className="badge" style={{ background: "var(--brand)", color: "var(--on-brand)" }}>✓ 저장 완료</span>
         <h2 className="text-xl font-bold">센 수량 {confirmed.size}개를 저장했어요</h2>
-        <p className="text-sm text-[var(--muted)]">오늘 주문 추천을 이 수량으로 다시 계산했습니다.</p>
-        <Link href="/" className="btn-primary !rounded-full !px-6">오늘 주문 보기 →</Link>
+        <p className="text-sm text-[var(--muted)]">발주 추천을 이 수량으로 다시 계산했습니다.</p>
+        <Link href={me?.home ?? "/"} className="btn-primary !rounded-full !px-6">{me?.role === "staff" ? "오늘 점검으로 →" : "오늘 주문 보기 →"}</Link>
       </section>
     );
   }

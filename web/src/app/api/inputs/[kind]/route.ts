@@ -23,7 +23,7 @@ async function kindOf(ctx: RouteContext<"/api/inputs/[kind]">): Promise<Kind | n
 export async function GET(req: Request, ctx: RouteContext<"/api/inputs/[kind]">) {
   const kind = await kindOf(ctx);
   if (!kind) return bad("알 수 없는 입력 종류", 404);
-  const sess = requireSession(req);
+  const sess = requireSession(req, ["manager"]);
   if (sess instanceof Response) return sess;
   if (!db) return noDb();
   switch (kind) {
@@ -42,7 +42,8 @@ export async function GET(req: Request, ctx: RouteContext<"/api/inputs/[kind]">)
 export async function POST(req: Request, ctx: RouteContext<"/api/inputs/[kind]">) {
   const kind = await kindOf(ctx);
   if (!kind) return bad("알 수 없는 입력 종류", 404);
-  const sess = requireSession(req);
+  // 재고 세기(실사)는 직원도, 나머지 입력은 점장만
+  const sess = requireSession(req, kind === "counts" ? ["manager", "staff"] : ["manager"]);
   if (sess instanceof Response) return sess;
   const dryRun = new URL(req.url).searchParams.get("dryRun") === "1";
   if (!db && !dryRun) return noDb();
@@ -121,7 +122,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inputs/[kind]">
 export async function DELETE(req: Request, ctx: RouteContext<"/api/inputs/[kind]">) {
   const kind = await kindOf(ctx);
   if (!kind) return bad("알 수 없는 입력 종류", 404);
-  const sess = requireSession(req);
+  const sess = requireSession(req, ["manager"]);
   if (sess instanceof Response) return sess;
   if (!db) return noDb();
   const id = Number(new URL(req.url).searchParams.get("id"));

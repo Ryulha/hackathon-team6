@@ -5,7 +5,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { DEFAULT_SETTINGS, runEngine, type EngineResult, type EngineSettings, type Overrides } from "@/lib/engine";
 import type { Snapshot } from "@/lib/types";
 
+export type Role = "staff" | "manager" | "supervisor";
+export type Me = { username: string; storeId: string; role: Role; roleLabel: string; home: string };
+
 type AppState = {
+  /** 로그인한 사람 (역할·소속 매장) — 화면·메뉴 구성에 사용 */
+  me: Me | null;
+  /** 슈퍼바이저가 보고 있는 매장 (직원·점장은 소속 매장 고정) */
+  viewStore: string | null;
+  setViewStore: (s: string) => void;
   snapshot: Snapshot | null;
   loading: boolean;
   error: string | null;
@@ -33,13 +41,15 @@ const Ctx = createContext<AppState | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [asOf, setAsOf] = useState<string | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
+  const [viewStore, setViewStoreRaw] = useState<string | null>(null);
   // 로그인 화면에서는 데이터를 불러오지 않는다 (세션 없음)
   const onLogin = usePathname() === "/login";
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   /** 마지막으로 응답(성공·실패)을 받은 요청 키 — 현재 키와 다르면 로딩 중 */
   const [doneKey, setDoneKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const key = asOf ?? "";
+  const key = `${asOf ?? ""}|${viewStore ?? ""}`;
   const loading = doneKey !== key;
   const [settings, setSettingsRaw] = useState<EngineSettings>(DEFAULT_SETTINGS);
   const [overrides, setOverrides] = useState<Overrides>({});
@@ -47,12 +57,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [completed, setCompleted] = useState<{ asOf: string; ids: Set<string> } | null>(null);
   const [doneVersion, setDoneVersion] = useState(0);
 
+  // 로그인한 사람 — 역할에 따라 메뉴·첫 화면이 달라진다
+  useEffect(() => {
+    if (onLogin) return;
+    let alive = true;
+    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((m: Me | null) => { if (alive && m) setMe(m); }).catch(() => {});
+    return () => { alive = false; };
+  }, [onLogin]);
+
   useEffect(() => {
     if (onLogin) return;
     const q = new URLSearchParams();
     if (asOf) q.set("asOf", asOf);
+    if (viewStore) q.set("store", viewStore); // 슈퍼바이저만 서버에서 반영됨
     const ctl = new AbortController();
-    const reqKey = asOf ?? "";
+    const reqKey = `${asOf ?? ""}|${viewStore ?? ""}`;
     fetch(`/api/snapshot?${q}`, { signal: ctl.signal })
       .then(async (r) => {
         // 세션이 만료되면 로그인 화면으로
@@ -66,12 +85,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       .then((s: Snapshot) => { setSnapshot(s); setError(null); setDoneKey(reqKey); })
       .catch((e) => { if (e.name !== "AbortError") { setError(String(e.message ?? e)); setDoneKey(reqKey); } });
     return () => ctl.abort();
-  }, [asOf, version, onLogin]);
+  }, [asOf, viewStore, version, onLogin]);
 
   // 이 기준일에 확정(모의 전송)한 발주 → 공급사별 완료 표시
   const snapAsOf = snapshot?.meta.asOf;
+  const canSeeOrders = me?.role === "manager";
   useEffect(() => {
-    if (onLogin || !snapAsOf) return;
+    if (onLogin || !snapAsOf || !canSeeOrders) return;
     let alive = true;
     fetch("/api/drafts")
       .then((r) => (r.ok ? r.json() : []))
@@ -83,10 +103,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {});
     return () => { alive = false; };
-  }, [snapAsOf, doneVersion, onLogin]);
+  }, [snapAsOf, doneVersion, onLogin, canSeeOrders]);
 
   // 기준일이 바뀌면 수정값 초기화 (다른 상황의 수량을 이어 쓰지 않도록)
   const setAsOfReset = useCallback((d: string | null) => { setAsOf(d); setOverrides({}); }, []);
+  const setViewStore = useCallback((st: string) => { setViewStoreRaw(st); setOverrides({}); }, []);
   const setSettings = useCallback((p: Partial<EngineSettings>) => setSettingsRaw((s) => ({ ...s, ...p })), []);
   const setOverride = useCallback((id: string, units: number | undefined) => setOverrides((o) => {
     const n = { ...o };
@@ -100,6 +121,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const refreshCompleted = useCallback(() => setDoneVersion((v) => v + 1), []);
 
   const value: AppState = {
+    me, viewStore: viewStore ?? snapshot?.meta.storeId ?? null, setViewStore,
     snapshot, loading, error,
     // 서버가 기준일을 판매 기록 범위로 보정할 수 있으므로, 응답을 받은 뒤에는 서버 값을 표시
     asOf: (!loading && snapshot?.meta.asOf) || asOf || snapshot?.meta.asOf || null,

@@ -1,4 +1,4 @@
-import { SESSION_COOKIE, SESSION_MAX_AGE, checkPassword, createToken } from "@/lib/auth/session";
+import { HOME, SESSION_COOKIE, SESSION_MAX_AGE, checkPassword, createToken } from "@/lib/auth/session";
 
 // 같은 아이디로 연속 실패 시 잠시 막기 (서버 인스턴스 단위, 데모 수준)
 const fails = new Map<string, { n: number; until: number }>();
@@ -23,9 +23,9 @@ export async function POST(req: Request) {
   }
   fails.delete(username);
 
-  const res = Response.json({ username: acc.username, storeId: acc.storeId });
+  const res = Response.json({ username: acc.username, storeId: acc.storeId, role: acc.role, home: HOME[acc.role] });
   res.headers.append("Set-Cookie", [
-    `${SESSION_COOKIE}=${createToken(acc.username, acc.storeId)}`, "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${SESSION_MAX_AGE}`,
+    `${SESSION_COOKIE}=${createToken(acc)}`, "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${SESSION_MAX_AGE}`,
     ...(process.env.NODE_ENV === "production" ? ["Secure"] : []),
   ].join("; "));
   return res;

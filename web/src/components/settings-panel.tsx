@@ -7,20 +7,29 @@ import { useApp } from "@/state/app-state";
 /** 추천 설정 페이지에서 다루는 항목 */
 export const CALC_KEYS = ["demandAdjustPct", "lookbackWeeks", "applyPromo", "serviceLevel", "leadTimeBufferDays", "expiryWarnDays", "overstockDays"] as const satisfies readonly (keyof EngineSettings)[];
 
-/** 왼쪽 패널: 로그인한 매장과 로그아웃만 (날짜·시각은 더보기의 시연용 설정으로) */
-export function SettingsPanel() {
-  const { snapshot, storeId } = useApp();
+/** 로그인한 사람(매장·역할)과 로그아웃. compact = 휴대폰 위쪽 막대용 */
+export function SettingsPanel({ compact = false }: { compact?: boolean }) {
+  const { snapshot, storeId, me } = useApp();
   const store = snapshot?.stores.find((s) => s.store_id === storeId);
+  const who = me?.role === "supervisor" ? "전 매장" : store?.store_name ?? "…";
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- 이전 매장 데이터가 메모리에 남지 않게 전체 새로고침
     window.location.href = "/login";
   };
+  if (compact) {
+    return (
+      <span className="flex items-center gap-1 text-xs">
+        <span className="text-right leading-tight"><b>{who}</b><br /><span className="hint">{me?.roleLabel}</span></span>
+        <button className="btn-ghost !px-2 !py-1 text-xs" onClick={logout}>로그아웃</button>
+      </span>
+    );
+  }
   return (
     <aside className="flex items-start justify-between gap-2 text-sm">
       <div className="min-w-0">
-        <span className="hint">로그인한 매장</span>
-        <p className="font-semibold">{store?.store_name ?? "…"} <span className="hint font-normal">관리자</span></p>
+        <span className="hint">로그인</span>
+        <p className="font-semibold">{who} <span className="hint font-normal">{me?.roleLabel}</span></p>
       </div>
       <button className="btn-ghost !px-2 !py-1 text-xs" onClick={logout}>로그아웃</button>
     </aside>

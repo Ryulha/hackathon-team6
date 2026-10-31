@@ -3,11 +3,15 @@
 import Image from "next/image";
 import { useState, type FormEvent } from "react";
 
-/** 심사·시연용 테스트 계정 (매장마다 관리자 1명) — README 에도 같은 내용 */
+/** 심사·시연용 테스트 계정 — README 에도 같은 내용 */
 const DEMO = [
-  { username: "s01", password: "cheese01!", store: "가상매장 A", note: "오피스 상권 · 대형" },
-  { username: "s02", password: "cheese02!", store: "가상매장 B", note: "주거·역세권" },
-  { username: "s03", password: "cheese03!", store: "가상매장 C", note: "" },
+  { role: "직원", note: "점검표 기록·재고 세기", accounts: [{ store: "가상매장 A", username: "s01-staff", password: "staff01!" }] },
+  { role: "점장", note: "발주·재고·점검 현황", accounts: [
+    { store: "가상매장 A", username: "s01", password: "cheese01!" },
+    { store: "가상매장 B", username: "s02", password: "cheese02!" },
+    { store: "가상매장 C", username: "s03", password: "cheese03!" },
+  ] },
+  { role: "슈퍼바이저", note: "전 매장 손익 진단", accounts: [{ store: "전 매장", username: "sv", password: "super01!" }] },
 ];
 
 export default function LoginPage() {
@@ -26,9 +30,10 @@ export default function LoginPage() {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }),
       });
       if (!r.ok) { setError((await r.json().catch(() => ({}))).error ?? "로그인하지 못했습니다."); return; }
-      // 로그인 전에 열려던 화면으로 (같은 사이트 경로만)
+      // 로그인 전에 열려던 화면으로 (같은 사이트 경로만), 없으면 역할별 첫 화면
+      const { home } = await r.json().catch(() => ({ home: "/" }));
       const next = new URLSearchParams(window.location.search).get("next");
-      window.location.href = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+      window.location.href = next && next.startsWith("/") && !next.startsWith("//") ? next : home ?? "/";
     } catch {
       setError("서버에 연결하지 못했습니다. 잠시 뒤 다시 시도하세요.");
     } finally {
@@ -62,8 +67,8 @@ export default function LoginPage() {
       {/* 로그인 폼 */}
       <section className="flex items-center justify-center px-6 py-12" style={{ background: "var(--surface)" }}>
         <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-bold tracking-[-0.02em]">매장 관리자 로그인</h2>
-          <p className="hint mt-1 !text-sm">매장마다 관리자 계정이 하나씩 있습니다. 로그인하면 내 매장 데이터만 보입니다.</p>
+          <h2 className="text-2xl font-bold tracking-[-0.02em]">로그인</h2>
+          <p className="hint mt-1 !text-sm">직원·점장·슈퍼바이저마다 필요한 화면이 따로 열립니다.</p>
 
           <form onSubmit={submit} className="mt-8 flex flex-col gap-4" noValidate>
             <label className="flex flex-col gap-1.5 text-sm">
@@ -89,17 +94,24 @@ export default function LoginPage() {
           <div className="mt-10 rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
             <p className="text-sm font-semibold">심사용 테스트 계정</p>
             <p className="hint mb-3">누르면 아이디와 비밀번호가 채워집니다.</p>
-            <ul className="flex flex-col gap-2">
-              {DEMO.map((d) => (
-                <li key={d.username}>
-                  <button type="button" className="btn w-full justify-between !rounded-full !px-4"
-                    onClick={() => { setUsername(d.username); setPassword(d.password); setError(""); }}>
-                    <span className="font-semibold">{d.store}<span className="hint ml-1.5 font-normal">{d.note}</span></span>
-                    <span className="font-mono text-xs text-[var(--muted)]">{d.username} / {d.password}</span>
-                  </button>
-                </li>
+            <div className="flex flex-col gap-3">
+              {DEMO.map((g) => (
+                <div key={g.role}>
+                  <p className="mb-1 text-xs font-semibold">{g.role} <span className="hint font-normal">{g.note}</span></p>
+                  <ul className="flex flex-col gap-1.5">
+                    {g.accounts.map((d) => (
+                      <li key={d.username}>
+                        <button type="button" className="btn w-full justify-between !rounded-full !px-4"
+                          onClick={() => { setUsername(d.username); setPassword(d.password); setError(""); }}>
+                          <span className="font-semibold">{d.store}</span>
+                          <span className="font-mono text-xs text-[var(--muted)]">{d.username} / {d.password}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
         </div>
       </section>
