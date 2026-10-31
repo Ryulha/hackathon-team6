@@ -93,7 +93,7 @@ function snapshot(stock: number, opt: { ing?: Partial<Ingredient>; hist?: Demand
   return {
     meta: {
       asOf, storeId: "S1", dataStart: "2026-09-01", dataEnd: "2026-10-04", providedEnd: "2026-10-04", source: "json", fixture: true,
-      overlay: { countedToday: [], estimated: false, uploadedThrough: null, masterEdits: [], priceEntries: 0, appOrders: 0 },
+      overlay: { countedToday: [], morningAdjusted: [], estimated: false, uploadedThrough: null, masterEdits: [], priceEntries: 0, appOrders: 0 },
     },
     stores: [], menus: [{ menu_id: "M1", menu_name: "버거", category: "", is_set: 0, set_components: "", virtual_price: 5000 }],
     ingredients: [{ ...ing, ...opt.ing }], bom: [{ menu_id: "M1", ingredient_id: "I1", qty_per_menu: 100, use_unit: "g" }],

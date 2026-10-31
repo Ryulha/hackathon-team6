@@ -60,6 +60,7 @@ export function Basis({ p }: { p: IngredientPlan }) {
   const packRisk = Number.isFinite(packDays) && packDays > ing.shelf_life_days * 0.5;
   const coverage = insights?.packCoverage.find((c) => c.store_id === snapshot?.meta.storeId && ing.ingredient_name.includes("양상추"));
   const counted = snapshot?.meta.overlay.countedToday.includes(ing.ingredient_id);
+  const morningAdj = snapshot?.meta.overlay.morningAdjusted.find((m) => m.ingredient_id === ing.ingredient_id);
   const edited = snapshot?.meta.overlay.masterEdits.filter((e) => e.entity_id === ing.ingredient_id || e.entity_id === ing.supplier_id) ?? [];
   const main = (q: number) => (q ? describeQty(q, ing).main : "—");
   const days = p.slot && p.nextSlot ? diffDays(p.nextSlot.arrivalDate, p.slot.arrivalDate) : 0;
@@ -88,9 +89,10 @@ export function Basis({ p }: { p: IngredientPlan }) {
             {coverage && coverage.expiry_waste_events > 0 && <> 데이터 분석상 이 매장은 기간 중 기한 경과로 {coverage.expiry_waste_events}번, {won(coverage.expiry_waste_cost)}어치를 버렸습니다.</>}
           </p>
         )}
-        {(counted || snapshot?.meta.overlay.estimated || edited.length > 0) && (
+        {(counted || morningAdj || snapshot?.meta.overlay.estimated || edited.length > 0) && (
           <ul className="mt-2 ml-4 list-disc text-[var(--low)]">
             {counted && <li>지금 남은 양은 오늘 입력한 실사 수량입니다 (07시 입고분 포함).</li>}
+            {morningAdj && <li>지금 남은 양에 이날 아침 실사조정({morningAdj.adjust_qty > 0 ? "+" : ""}{fmtQty(morningAdj.adjust_qty, ing)})을 반영했습니다 (장부 대비).</li>}
             {!counted && snapshot?.meta.overlay.estimated && <li>지금 남은 양은 올린 판매 기록으로 계산한 추정치입니다. 실사 재고를 입력하면 정확해집니다.</li>}
             {edited.map((e, i) => <li key={i}>사용자가 바꾼 조건 적용: {e.field} = {e.value}</li>)}
           </ul>

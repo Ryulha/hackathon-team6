@@ -54,7 +54,7 @@ const SECTIONS: { title: string; items: string[] }[] = [
     title: "반영하지 못한 조건 / 한계",
     items: [
       "판매·재고·발주 이력은 합성 데이터이며, 결과는 실제 매장 성과와 무관합니다.",
-      "매장 간 이동은 추천하지 않습니다(알림에서 검토만 권함). 보관·품질·조리로 인한 폐기는 발주로 줄일 수 없어 계산에 넣지 않습니다.",
+      "매장 간 이동은 '다음 입고 전에 떨어지는 품목'에 여유 있는 다른 매장을 보여 주는 데까지만 합니다(제공 재고 마지막 날 마감 기준, 보내는 매장도 3일치는 남김). 이동 요청·기록 절차는 현장에서도 정해지지 않아 만들지 않았습니다. 보관·품질·조리로 인한 폐기는 발주로 줄일 수 없어 계산에 넣지 않습니다.",
       "발주 확정은 모의 구현이며 실제 공급사 시스템과 연동되지 않습니다.",
     ],
   },
@@ -92,12 +92,10 @@ export default function AssumptionsPage() {
   );
 }
 
-/** 팀 백테스트 결과 (feature/order-optimization 최적화로그.md, analysis/backtest_summary.csv) */
+/** 팀 백테스트 결과 — feature/order-optimization 3차(4fb4fc2) 최적화로그.md §6, 9월 아웃오브샘플, 세 매장 합계 */
 const BACKTEST = [
-  { label: "실제 과거 발주 (기준)", waste: 23481, stockout: 6, inv: 1638619, amount: 21849600 },
-  { label: "엔진 + 품절 이력 z 상향", waste: 8053, stockout: 23, inv: 916675, amount: 20874800 },
-  { label: "넉넉 (z 2.05 일괄)", waste: 12850, stockout: 15, inv: 1008408, amount: 21204500 },
-  { label: "채택: 기한별 차등 z", waste: 8053, stockout: 17, inv: 986652, amount: 21144400 },
+  { label: "실제 과거 발주 (기준)", waste: 51265, stockout: 2, lost: 7, inv: 7154374, amount: 100400500 },
+  { label: "채택: 팀 엔진 3차 (z 3.0, 급증 대응)", waste: 41616, stockout: 9, lost: 181, inv: 4766606, amount: 98782600 },
 ];
 
 function Backtest() {
@@ -105,19 +103,20 @@ function Backtest() {
   return (
     <section className="card overflow-x-auto text-sm">
       <h3 className="section-title">추천 방식 검증 (백테스트)</h3>
-      <p className="hint mb-2">팀에서 가상매장 C의 2026년 9월을 같은 시작 재고·같은 실제 수요로 다시 돌려, 과거 실제 발주와 엔진 추천을 비교했습니다. 품절 시 다음 날 긴급 입고로 가정했습니다.</p>
+      <p className="hint mb-2">팀에서 3~8월로 설정값을 정하고(튜닝), 고르는 데 쓰지 않은 9월에 세 매장을 같은 시작 재고·같은 실제 수요로 다시 돌려 과거 실제 발주와 비교했습니다. 매장 간 이동·긴급 발주도 실제 기록처럼 재현했습니다.</p>
       <table className="tbl">
-        <thead><tr><th>방식</th><th className="num">기한 경과 폐기</th><th className="num">품절(품목·일)</th><th className="num">평균 재고금액</th><th className="num">발주금액</th></tr></thead>
+        <thead><tr><th>방식</th><th className="num">기한 경과 폐기</th><th className="num">품절(품목·일)</th><th className="num">못 판 메뉴</th><th className="num">평균 재고금액</th><th className="num">발주금액</th></tr></thead>
         <tbody>
           {BACKTEST.map((r) => (
             <tr key={r.label} style={r.label.startsWith("채택") ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--brand)" } : undefined}>
-              <td>{r.label}</td><td className="num">{f(r.waste)}원</td><td className="num">{r.stockout}</td><td className="num">{f(r.inv)}원</td><td className="num">{f(r.amount)}원</td>
+              <td>{r.label}</td><td className="num">{f(r.waste)}원</td><td className="num">{r.stockout}</td><td className="num">{r.lost}개</td><td className="num">{f(r.inv)}원</td><td className="num">{f(r.amount)}원</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="mt-2">채택한 방식은 실제 과거 발주보다 <b>기한 경과 폐기 −66%, 평균 재고 −40%, 발주금액 −3%</b>였습니다.
-        다만 <b>품절은 6 → 17로 늘었습니다</b> — 일부는 연휴 수요 급증처럼 안전재고로 막기 어려운 날로 추정되어 원인을 확인 중입니다. 품절을 더 줄이려면 추천 설정에서 &lsquo;넉넉하게&rsquo;를 고르세요.</p>
+      <p className="mt-2">채택한 방식은 실제 과거 발주보다 <b>기한 경과 폐기 −19%, 평균 재고 −33%, 발주금액 −2%</b>였고, 가상매장 A·B는 품절 0건이었습니다.
+        다만 <b>가상매장 C는 9월 초 판매가 평소의 1.8배로 뛴 날 품절이 몰려</b> 못 판 메뉴가 181개였습니다. 판매 급증이 예상되면 추천 설정에서 &lsquo;넉넉하게&rsquo;를 고르세요(팀 분석: 9월 못 판 메뉴가 절반 이하로 줆).</p>
+      <p className="hint mt-1">이 결과는 규칙 기반 예측으로 낸 것입니다. AI 예측(CatBoost)과 함께 쓸 때는 따로 검증하지 않았습니다.</p>
       <p className="hint mt-1">합성 데이터 기준 시뮬레이션 결과이며 실제 매장 성과가 아닙니다.</p>
     </section>
   );

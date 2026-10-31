@@ -63,7 +63,7 @@ export default function SettingsPage() {
             desc={<>판매는 날마다 들쭉날쭉해서 예측보다 많이 팔리는 날이 있습니다. 최근 8주 동안 하루 사용량이 예측에서 얼마나 벗어났는지(변동폭)를 재고,
               다음 입고까지 그 변동을 버틸 만큼 여유분을 더 주문합니다.
               {example && <> 예: {example.ingredient.ingredient_name}은 하루 변동폭이 약 {fmtQty(example.sigma, example.ingredient)}입니다.</>}
-              <span className="mt-1 block">사용기한 {OPT.longShelf}일 이상인 품목은 남아도 버릴 위험이 낮아 항상 &lsquo;넉넉하게&rsquo; 이상으로, 최근 {OPT.stockoutWindow}일 안에 품절된 품목은 한 단계 더 넉넉하게 잡습니다.</span></>}>
+              <span className="mt-1 block">기본 &lsquo;보통&rsquo;(z {SERVICE_LEVELS.normal.z})은 팀 백테스트(3~8월 튜닝, 9월 검증)에서 폐기·품절·재고 비용 합이 가장 적었던 값입니다. 연휴·행사처럼 판매가 크게 늘 때는 &lsquo;넉넉하게&rsquo;를 권합니다. 최근 {OPT.stockoutWindow}일 품절 기록은 근거로만 보여 줍니다(튜닝 결과 여유분을 늘려도 효과가 없었음).</span></>}>
             <div className="tabs w-full" role="radiogroup" aria-label="여유분 수준">
               {(Object.keys(SERVICE_LEVELS) as ServiceLevel[]).map((k) => (
                 <button key={k} role="radio" aria-checked={settings.serviceLevel === k}

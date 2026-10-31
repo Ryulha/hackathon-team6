@@ -72,6 +72,8 @@ export type Snapshot = {
     overlay: {
       /** 기준일 실사 입력이 반영된 식자재 */
       countedToday: string[];
+      /** 제공 데이터의 기준일 아침 실사조정(adjust_qty)을 반영한 품목 */
+      morningAdjusted: { ingredient_id: string; adjust_qty: number }[];
       /** 제공 기간 이후 재고를 업로드 판매로 이어 계산했는지 (= 추정 재고) */
       estimated: boolean;
       uploadedThrough: string | null;

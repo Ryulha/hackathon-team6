@@ -128,7 +128,7 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
   const histFrom = addDays(asOf, -7 * MAX_LOOKBACK_WEEKS);
 
   const [menus, rawIngredients, bom, rawSuppliers, rawPrices, calendar, promotions, menuAvailability,
-    providedDemand, inventoryHistory, baseLots, pos, receipts, recentStockouts, recentWaste] = await Promise.all([
+    providedDemand, inventoryHistory, baseLots, pos, receipts, recentStockouts, recentWaste, morning] = await Promise.all([
     src.rows<Menu>("menus"), src.rows<Ingredient>("ingredients"), src.rows<BomRow>("bom"),
     src.rows<Supplier>("suppliers"), src.rows<PriceRow>("ingredient_price_history"), src.rows<CalendarRow>("calendar"),
     src.rows<Promotion>("promotions", st), src.rows<MenuAvailability>("menu_availability", st),
@@ -139,6 +139,8 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
     src.rows<Receipt>("receipts", { ...st, dateCol: "receipt_date", from: addDays(baseDay, -30), to: addDays(baseDay, 1) }),
     src.rows<Stockout>("stockouts", { ...st, dateCol: "date", from: recentFrom, to: asOf }),
     src.rows<DailyWaste>("agg_daily_waste", { ...st, dateCol: "date", from: recentFrom, to: asOf }),
+    // 기준일 아침 실사(제공 기간 안일 때): 07시 입고 후 영업 전 실사조정 — 팀 엔진 morning_lots 와 같은 처리
+    asOf <= providedEnd ? src.rows<InventoryDaily>("inventory_daily", { ...st, dateCol: "date", from: asOf, to: addDays(asOf, 1) }) : Promise.resolve([] as InventoryDaily[]),
   ]);
 
   const allDemand = [...providedDemand, ...uploaded.filter((u) => u.date < asOf)];
@@ -146,17 +148,22 @@ async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string
   const { suppliers, ingredients, applied } = applyMasterEdits(rawSuppliers, rawIngredients, ov.masterEdits);
   const prices = mergePrices(rawPrices, ov.priceEntries);
   const appOrders = draftArrivals(ov.drafts, providedEnd, asOf);
+  const adjusted = morning.filter((r) => Number(r.adjust_qty) !== 0);
+  const morningCounts = adjusted.map((r) => ({ date: asOf, ingredient_id: r.ingredient_id, counted_qty: Number(r.counted_qty) }));
+  const userCounted = new Set(ov.counts.filter((c) => c.date === asOf).map((c) => c.ingredient_id));
   const projected = projectStartStock({
     // 제공 발주는 발주 당시 포장 단위로 환산 (사용자가 포장 단위를 바꿔도 이미 발주된 물량은 그대로)
     ingredients, bom, baseLots, open: [...openOrders(pos, receipts, rawIngredients), ...appOrders],
-    uploaded, counts: ov.counts, baseDay, asOf, storeId,
+    uploaded, counts: [...morningCounts, ...ov.counts], baseDay, asOf, storeId,
   });
 
   return {
     meta: {
       asOf, storeId, dataStart: range.start, dataEnd, providedEnd, source: src.name, fixture: range.fixture,
       overlay: {
-        countedToday: projected.countedToday, estimated: asOf > addDays(providedEnd, 1),
+        countedToday: projected.countedToday.filter((id) => userCounted.has(id)),
+        morningAdjusted: adjusted.filter((r) => !userCounted.has(r.ingredient_id)).map((r) => ({ ingredient_id: r.ingredient_id, adjust_qty: Number(r.adjust_qty) })),
+        estimated: asOf > addDays(providedEnd, 1),
         uploadedThrough: dataEnd > providedEnd ? dataEnd : null,
         masterEdits: applied.map(({ entity, entity_id, field, value }) => ({ entity, entity_id, field, value })),
         priceEntries: ov.priceEntries.length, appOrders: appOrders.length,
