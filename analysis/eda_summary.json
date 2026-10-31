@@ -1,0 +1,182 @@
+{
+  "period_start": "2026-01-01",
+  "period_end": "2026-09-30",
+  "store_count": 3,
+  "ingredient_count": 22,
+  "menu_count": 16,
+  "sales_rows": 98910,
+  "panel_rows": 18018,
+  "net_sales_qty": 207394,
+  "lost_qty": 74,
+  "lost_rate": 0.0003544774332001648,
+  "waste_cost": 2494848,
+  "stockout_item_days": 15,
+  "top_waste_items": [
+    {
+      "ingredient_id": "I007",
+      "ingredient_name": "슬라이스 치즈",
+      "waste_cost": 724041
+    },
+    {
+      "ingredient_id": "I010",
+      "ingredient_name": "토마토",
+      "waste_cost": 531785
+    },
+    {
+      "ingredient_id": "I009",
+      "ingredient_name": "양상추",
+      "waste_cost": 466870
+    },
+    {
+      "ingredient_id": "I008",
+      "ingredient_name": "버거 소스",
+      "waste_cost": 255616
+    },
+    {
+      "ingredient_id": "I011",
+      "ingredient_name": "양파(슬라이스용)",
+      "waste_cost": 126014
+    }
+  ],
+  "waste_reasons": [
+    {
+      "reason": "보관 불량",
+      "waste_cost": 741372,
+      "cost_share": 0.2971611897798984,
+      "management_scope": "보관·품질·조리 운영 관리"
+    },
+    {
+      "reason": "품질 이상",
+      "waste_cost": 690733,
+      "cost_share": 0.27686376083833564,
+      "management_scope": "보관·품질·조리 운영 관리"
+    },
+    {
+      "reason": "조리 실수",
+      "waste_cost": 683198,
+      "cost_share": 0.27384353676055617,
+      "management_scope": "보관·품질·조리 운영 관리"
+    },
+    {
+      "reason": "소비기한 경과",
+      "waste_cost": 379545,
+      "cost_share": 0.1521315126212098,
+      "management_scope": "발주·재고 운용 개선 검토"
+    }
+  ],
+  "expiry_waste_cost": 379545,
+  "top_expiry_items": [
+    {
+      "ingredient_id": "I009",
+      "ingredient_name": "양상추",
+      "waste_cost": 168326
+    },
+    {
+      "ingredient_id": "I020",
+      "ingredient_name": "토스트 식빵",
+      "waste_cost": 71499
+    },
+    {
+      "ingredient_id": "I017",
+      "ingredient_name": "코울슬로",
+      "waste_cost": 32479
+    },
+    {
+      "ingredient_id": "I011",
+      "ingredient_name": "양파(슬라이스용)",
+      "waste_cost": 32362
+    },
+    {
+      "ingredient_id": "I004",
+      "ingredient_name": "치킨 패티",
+      "waste_cost": 24588
+    }
+  ],
+  "lettuce_pack_coverage": [
+    {
+      "store_id": "S01",
+      "store_name": "가상매장 A",
+      "avg_daily_consumed_qty": 17767.619047619046,
+      "observed_days": 273,
+      "pack_qty": 8000,
+      "shelf_life_days": 5,
+      "one_pack_days": 0.4502572898799314,
+      "expiry_waste_cost": 0,
+      "expiry_waste_events": 0
+    },
+    {
+      "store_id": "S02",
+      "store_name": "가상매장 B",
+      "avg_daily_consumed_qty": 7637.2344322344325,
+      "observed_days": 273,
+      "pack_qty": 8000,
+      "shelf_life_days": 5,
+      "one_pack_days": 1.0474995983146,
+      "expiry_waste_cost": 63192,
+      "expiry_waste_events": 2
+    },
+    {
+      "store_id": "S03",
+      "store_name": "가상매장 C",
+      "avg_daily_consumed_qty": 6179.468864468865,
+      "observed_days": 273,
+      "pack_qty": 8000,
+      "shelf_life_days": 5,
+      "one_pack_days": 1.2946096461459577,
+      "expiry_waste_cost": 105134,
+      "expiry_waste_events": 6
+    }
+  ],
+  "stores": [
+    {
+      "store_id": "S01",
+      "net_sales_qty": 118127.0,
+      "demand_qty": 118902.0,
+      "lost_qty": 47.0,
+      "sales_amount": 1334620000.0,
+      "lost_rate": 0.0003952835107903988,
+      "waste_cost": 1207118.0,
+      "consumed_cost": 476849936.87329364,
+      "stockout_item_days": 5,
+      "emergency_amount": 68100.0,
+      "inventory_item_days": 6006,
+      "store_name": "가상매장 A",
+      "waste_cost_share": 0.0025250500702681607
+    },
+    {
+      "store_id": "S02",
+      "net_sales_qty": 48141.0,
+      "demand_qty": 48482.0,
+      "lost_qty": 10.0,
+      "sales_amount": 539804800.0,
+      "lost_rate": 0.0002062621178994266,
+      "waste_cost": 660040.0,
+      "consumed_cost": 193011080.57130954,
+      "stockout_item_days": 3,
+      "emergency_amount": 85600.0,
+      "inventory_item_days": 6006,
+      "store_name": "가상매장 B",
+      "waste_cost_share": 0.0034080455467647994
+    },
+    {
+      "store_id": "S03",
+      "net_sales_qty": 41126.0,
+      "demand_qty": 41374.0,
+      "lost_qty": 17.0,
+      "sales_amount": 450732700.0,
+      "lost_rate": 0.00041088606371150966,
+      "waste_cost": 627690.0,
+      "consumed_cost": 160890668.75190476,
+      "stockout_item_days": 7,
+      "emergency_amount": 69200.0,
+      "inventory_item_days": 6006,
+      "store_name": "가상매장 C",
+      "waste_cost_share": 0.0038861836193131685
+    }
+  ],
+  "insights": [
+    "폐기비용 2,494,848원 중 소비기한 경과는 379,545원(15.2%)입니다. 발주·재고 운용 개선의 우선 검토 대상으로 구분하고, 나머지 84.8%는 보관·품질·조리 운영 관리로 분리하세요. 치즈·토마토의 소비기한 경과 폐기는 각각 0원이므로 발주 개선 효과로 연결하지 않습니다.",
+    "양상추 1박스는 8kg으로, 기간 평균 실제 소진량 기준 가상매장 A 0.45일치, 가상매장 B 1.05일치, 가상매장 C 1.29일치입니다. 같은 한 박스라도 작은 매장에서는 더 오래 갑니다. 매장별 잔량·입고 예정량과 5일의 소비기한을 함께 확인해 발주 수량을 검토하세요. 실제 소비기한 경과 폐기는 B·C 매장에서만 발생했고 A는 0원입니다.",
+    "양상추의 소비기한 경과 폐기는 168,326원으로 해당 사유 폐기의 44.3%입니다. 먼저 양상추의 사용기한 임박 재고와 다음 입고 시점을 점검하고, 과잉 위험이 보이면 수량 수정·발주 보류·매장 이동을 검토하세요."
+  ]
+}

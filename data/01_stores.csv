@@ -1,0 +1,4 @@
+﻿store_id,store_name,trade_area,store_type,open_hour,close_hour,dine_in,delivery,relative_size
+S01,가상매장 A,오피스 상권,대형(메가스토어),10,21,Y,Y,1.0
+S02,가상매장 B,주거·역세권 상권,일반,11,24,Y,Y,0.44
+S03,가상매장 C,대학가 상권,일반,10,21,Y,Y,0.36

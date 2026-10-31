@@ -1,0 +1,3 @@
+﻿supplier_id,supplier_name,order_days,order_cutoff,lead_time_days,delivery_days,min_order_amount,note
+SUP_A,공급업체 A,"일,월,화,수,목,금",17:00,1,"월,화,수,목,금,토",120000,발주 다음날 입고. 1회 발주금액이 최소 금액 미만이면 발주 불가(가상 금액)
+SUP_B,공급업체 B,"일,화,목,금",16:00,1,"월,수,금,토",0,발주 다음날 입고(요일 무관). 최소 발주금액 없음

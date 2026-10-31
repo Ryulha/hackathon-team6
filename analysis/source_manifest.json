@@ -1,0 +1,104 @@
+[
+  {
+    "file": "01_stores.csv",
+    "rows": 3,
+    "columns": 9,
+    "sha256": "ba39e18300d5614bfeba24dd1e0b7c79b091b6354529b0de5fdaf722d221cd3b"
+  },
+  {
+    "file": "02_menus.csv",
+    "rows": 16,
+    "columns": 6,
+    "sha256": "ec90c4b5974f2dd55508c9873bb336612d05891c3ebd914aa33856c2cc74b830"
+  },
+  {
+    "file": "03_ingredients.csv",
+    "rows": 22,
+    "columns": 9,
+    "sha256": "11f0438a671ddb22cea0b7bdcefb8a18612ea9c13acacb0e63d29c2407a073c1"
+  },
+  {
+    "file": "04_bom.csv",
+    "rows": 105,
+    "columns": 4,
+    "sha256": "0fb3ed1359bd06a10f613fd94c14c680d8fd544ad445f14adb9976caf8a9ba4a"
+  },
+  {
+    "file": "05_suppliers.csv",
+    "rows": 2,
+    "columns": 8,
+    "sha256": "732668f5189ba849391e937f41e02bfabb0019a18e774b33a72331a06d494808"
+  },
+  {
+    "file": "06_ingredient_price_history.csv",
+    "rows": 38,
+    "columns": 3,
+    "sha256": "9a48e52ba4e094e59aca0a416547ee46b7a2747522556692d7213e4ef54387e6"
+  },
+  {
+    "file": "07_calendar.csv",
+    "rows": 273,
+    "columns": 4,
+    "sha256": "044b2c119218b6ee959185ec334a3d0cf95878f57368e236f40ffb28899c3bc4"
+  },
+  {
+    "file": "08_promotions.csv",
+    "rows": 1,
+    "columns": 6,
+    "sha256": "2673dfe436dada542d0b205e387c3da2cca5c324d746ff8647c1871a1c37dc9d"
+  },
+  {
+    "file": "09_sales.csv",
+    "rows": 98910,
+    "columns": 11,
+    "sha256": "8488d34a8ccb757f2efe88935038a11ff02765bd1a434dc134950918c3a2bb2e"
+  },
+  {
+    "file": "10_inventory_daily.csv",
+    "rows": 18018,
+    "columns": 19,
+    "sha256": "d9c537c749abcdcd74f792807b66c3348ec6f0877dd1c55209afc5da430da3ec"
+  },
+  {
+    "file": "11_purchase_orders.csv",
+    "rows": 7284,
+    "columns": 13,
+    "sha256": "0084af794254b26d83b8e860c730573451b8d8625e58e0e822776ef0e8a7f56d"
+  },
+  {
+    "file": "12_receipts.csv",
+    "rows": 7259,
+    "columns": 11,
+    "sha256": "9ff1b8d65a18034e0076bd760fdeee1acbf78a48d4a2737f79480d3d779c6b8d"
+  },
+  {
+    "file": "13_waste.csv",
+    "rows": 647,
+    "columns": 7,
+    "sha256": "096ed78fced893c681498837b53392bfcbde925d8ce5deb9f3889831b85e252a"
+  },
+  {
+    "file": "14_transfers.csv",
+    "rows": 81,
+    "columns": 9,
+    "sha256": "8ee817ef9ea82d8ee51f29f3d644885bd49ca51478dbdfaec7610192cebea0d4"
+  },
+  {
+    "file": "15_menu_availability.csv",
+    "rows": 48,
+    "columns": 6,
+    "sha256": "066c6d2a07ef933ea09c977234c370b0d707a33d4b28e9315d1667c3167a1ca5"
+  },
+  {
+    "file": "16_inventory_lots_daily.csv",
+    "rows": 26615,
+    "columns": 8,
+    "sha256": "67fda218d0706e6a8319148c974e2f7291c87a67f3ff856e5aea9bee0d0a3b74"
+  },
+  {
+    "file": "17_stockouts.csv",
+    "rows": 15,
+    "columns": 6,
+    "sha256": "fc18a5474329e6daefcf99953f34af607fafc976253dff7827441911b4cdc734"
+  }
+]

@@ -1,0 +1,4 @@
+﻿store_id,store_name,avg_daily_consumed_qty,observed_days,pack_qty,shelf_life_days,one_pack_days,expiry_waste_cost,expiry_waste_events
+S01,가상매장 A,17767.61904762,273,8000,5,0.45025729,0,0
+S02,가상매장 B,7637.23443223,273,8000,5,1.04749960,63192,2
+S03,가상매장 C,6179.46886447,273,8000,5,1.29460965,105134,6

@@ -1,0 +1,836 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>식자재 운영 분석 보고서</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;background:#f5f4ef;color:#24322b;margin:0;line-height:1.65}main{max-width:1100px;margin:auto;padding:44px 24px}h1{font-size:32px;margin:8px 0}h2{font-size:22px;margin-top:36px}.eyebrow{color:#566b5d;font-weight:700}.lead{font-size:18px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card,section{background:white;border:1px solid #e1e5df;border-radius:14px;padding:22px}.card b{display:block;font-size:28px;color:#255c40}.muted{color:#617267;font-size:14px}li{margin:12px 0}table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:12px 9px;border-bottom:1px solid #e1e5df;text-align:right}th{background:#edf2ec}td:first-child,th:first-child{text-align:left}.tablewrap{overflow-x:auto}.barrow{display:grid;grid-template-columns:140px 1fr 110px;gap:14px;align-items:center;margin:14px 0}.barrow div{background:#edf2ec;height:20px;border-radius:4px}i{display:block;background:#418361;height:20px;border-radius:4px}.barrow b{text-align:right;font-size:14px}details{background:white;border-radius:12px;padding:18px;margin-top:20px}summary{cursor:pointer;font-weight:700}a{color:#255c40}@media(max-width:1000px){.cards{grid-template-columns:repeat(2,1fr)}.barrow{grid-template-columns:95px 1fr 90px;gap:8px}main{padding:24px 16px}h1{font-size:26px}}@media print{body{background:white}main{padding:0}.card,section{break-inside:avoid}details{display:none}}</style>
+<main><div class="eyebrow">크라이치즈버거 · 식자재 관리 및 발주</div><h1>어느 품목부터 관리하면 좋을까요?</h1>
+<p class="lead">판매·재고·폐기 이력을 연결해, 발주 판단에 필요한 항목을 정리했습니다.</p>
+<p class="muted">분석 기간 2026-01-01 ~ 2026-09-30 · 합성 데이터, 가상 금액 · 계산 기반 EDA 보고서이며 LLM 생성 보고서가 아닙니다.</p>
+<div class="cards"><div class="card">분석용 데이터<b>18,018</b><span class="muted">날짜 × 매장 × 식자재</span></div><div class="card">가상 폐기비용<b>2,494,848원</b><span class="muted">기간 전체, 3개 매장</span></div><div class="card">품절 판매손실<b>74개</b><span class="muted">주문 메뉴 수량 기준</span></div><div class="card">데이터 검증<b>0건 오류</b><span class="muted">117개 항목 검사 · 1개 안내</span></div></div>
+<h2>운영에 먼저 반영할 사항</h2><section><ol><li>폐기비용 2,494,848원 중 소비기한 경과는 379,545원(15.2%)입니다. 발주·재고 운용 개선의 우선 검토 대상으로 구분하고, 나머지 84.8%는 보관·품질·조리 운영 관리로 분리하세요. 치즈·토마토의 소비기한 경과 폐기는 각각 0원이므로 발주 개선 효과로 연결하지 않습니다.</li><li>양상추 1박스는 8kg으로, 기간 평균 실제 소진량 기준 가상매장 A 0.45일치, 가상매장 B 1.05일치, 가상매장 C 1.29일치입니다. 같은 한 박스라도 작은 매장에서는 더 오래 갑니다. 매장별 잔량·입고 예정량과 5일의 소비기한을 함께 확인해 발주 수량을 검토하세요. 실제 소비기한 경과 폐기는 B·C 매장에서만 발생했고 A는 0원입니다.</li><li>양상추의 소비기한 경과 폐기는 168,326원으로 해당 사유 폐기의 44.3%입니다. 먼저 양상추의 사용기한 임박 재고와 다음 입고 시점을 점검하고, 과잉 위험이 보이면 수량 수정·발주 보류·매장 이동을 검토하세요.</li></ol></section>
+<h2>폐기 사유에 따라 대응을 구분하세요</h2><section class="tablewrap"><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>폐기 사유</th>
+      <th>가상 폐기비용(원)</th>
+      <th>비용 비중</th>
+      <th>관리 방향</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>보관 불량</td>
+      <td>741,372</td>
+      <td>29.7%</td>
+      <td>보관·품질·조리 운영 관리</td>
+    </tr>
+    <tr>
+      <td>품질 이상</td>
+      <td>690,733</td>
+      <td>27.7%</td>
+      <td>보관·품질·조리 운영 관리</td>
+    </tr>
+    <tr>
+      <td>조리 실수</td>
+      <td>683,198</td>
+      <td>27.4%</td>
+      <td>보관·품질·조리 운영 관리</td>
+    </tr>
+    <tr>
+      <td>소비기한 경과</td>
+      <td>379,545</td>
+      <td>15.2%</td>
+      <td>발주·재고 운용 개선 검토</td>
+    </tr>
+  </tbody>
+</table><p class="muted">비중은 폐기 수량이 아닌 가상 폐기비용 기준입니다. 소비기한 경과는 발주·재고 운용으로 개선할 수 있는지 검토할 범위이며, 전액 절감 가능액이나 과다 발주만으로 발생했다는 뜻은 아닙니다. 보관·품질·조리 폐기는 이 앱의 발주 개선 효과 산정에서 제외합니다.</p></section>
+<h2>소비기한 경과 폐기부터 확인하세요</h2><section><div class="barrow"><span>양상추</span><div><i style="width:100.0%"></i></div><b>168,326원</b></div><div class="barrow"><span>토스트 식빵</span><div><i style="width:42.5%"></i></div><b>71,499원</b></div><div class="barrow"><span>코울슬로</span><div><i style="width:19.3%"></i></div><b>32,479원</b></div><div class="barrow"><span>양파(슬라이스용)</span><div><i style="width:19.2%"></i></div><b>32,362원</b></div><div class="barrow"><span>치킨 패티</span><div><i style="width:14.6%"></i></div><b>24,588원</b></div><p class="muted">소비기한 경과 사유만 집계했습니다. 총폐기 상위인 슬라이스 치즈·토마토는 이 사유의 폐기가 각각 0원입니다. 원인별 구분 없이 총폐기 감소를 발주 개선 성과로 주장하지 않습니다.</p></section>
+<h2>양상추 한 박스는 매장마다 며칠치일까요?</h2><section class="tablewrap"><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>매장</th>
+      <th>하루 평균 소진량</th>
+      <th>1박스 = 며칠치</th>
+      <th>소비기한</th>
+      <th>소비기한 경과 폐기비용</th>
+      <th>발생 횟수</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>가상매장 A</td>
+      <td>17.77kg</td>
+      <td>0.45일치</td>
+      <td>5일</td>
+      <td>0원</td>
+      <td>0회</td>
+    </tr>
+    <tr>
+      <td>가상매장 B</td>
+      <td>7.64kg</td>
+      <td>1.05일치</td>
+      <td>5일</td>
+      <td>63,192원</td>
+      <td>2회</td>
+    </tr>
+    <tr>
+      <td>가상매장 C</td>
+      <td>6.18kg</td>
+      <td>1.29일치</td>
+      <td>5일</td>
+      <td>105,134원</td>
+      <td>6회</td>
+    </tr>
+  </tbody>
+</table><p class="muted">1박스 8,000g ÷ 분석 기간의 매장별 하루 평균 실제 소진량. 모든 영업일(273일)을 포함한 사후 평균이며, 품절로 줄어든 소진도 포함합니다. 소비기한 경과 폐기비용·발생 횟수는 13_waste.csv에서 reason=소비기한 경과, ingredient_id=I009인 기록을 매장별로 집계했습니다. 발생 횟수는 해당 폐기 내역 행 수이며, 기록상 매장별 발생일 수와 같습니다. 비용은 가상 원화입니다. 현재 잔량·확정 수요·앞으로 남을 양을 뜻하지 않습니다. 1박스가 하루치보다 크다는 사실만으로 소비기한 경과를 단정할 수 없습니다.</p></section>
+<h2>매장별 현황</h2><section class="tablewrap"><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>매장</th>
+      <th>확정 판매(메뉴 개)</th>
+      <th>품절 손실(메뉴 개)</th>
+      <th>수요 대비 손실률</th>
+      <th>가상 폐기비용(원)</th>
+      <th>품절 품목·일</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>가상매장 A</td>
+      <td>118,127</td>
+      <td>47</td>
+      <td>0.040%</td>
+      <td>1,207,118</td>
+      <td>5</td>
+    </tr>
+    <tr>
+      <td>가상매장 B</td>
+      <td>48,141</td>
+      <td>10</td>
+      <td>0.021%</td>
+      <td>660,040</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>가상매장 C</td>
+      <td>41,126</td>
+      <td>17</td>
+      <td>0.041%</td>
+      <td>627,690</td>
+      <td>7</td>
+    </tr>
+  </tbody>
+</table><p class="muted">손실률 = 품절 손실 메뉴 수량 ÷ 품절 전 수요 메뉴 수량. 품절 품목·일은 동일 날짜의 여러 품목을 각각 셉니다.</p></section>
+<h2>발주 도우미와 연결하는 방법</h2><section><ol><li>매장과 기준일을 선택합니다.</li><li>입고 전 품절 위험과 사용기한 임박 품목을 먼저 확인합니다.</li><li>발주 수량을 수정하면 최신 수량으로 부족·폐기 전망을 다시 계산합니다.</li><li>AI 브리핑으로 이유를 확인하고 발주서를 내려받습니다.</li></ol></section>
+<details><summary>검증 내역과 데이터 정의 보기</summary><div class="tablewrap"><table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>check</th>
+      <th>status</th>
+      <th>issue_count</th>
+      <th>detail</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>01 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>01 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>01 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>02 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>02 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>02 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>03 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>03 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>03 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>03 supplier_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>04 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>04 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>04 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>04 menu_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>04 ingredient_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>05 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>05 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>05 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>06 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>06 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>06 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>06 ingredient_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>07 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>07 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>07 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>08 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>08 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>08 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>08 store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>09 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>09 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>09 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>09 기준일 범위</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>09 store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>09 menu_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>10 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>10 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>10 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>10 기준일 범위</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>10 store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>10 ingredient_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>11 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>11 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>11 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>11 store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>11 ingredient_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>11 supplier_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>12 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>12 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>12 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>12 store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>12 ingredient_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>12 po_line_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>13 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>13 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>13 기준일 범위</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>13 store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>13 ingredient_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>14 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>14 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>14 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>14 기준일 범위</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>14 from_store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>14 to_store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>14 ingredient_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>15 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>15 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>15 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>15 store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>15 menu_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>16 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>16 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>16 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>16 기준일 범위</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>16 store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>16 ingredient_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>17 필수값 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>17 기본키 중복</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>17 완전 중복행</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>17 기준일 범위</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>17 store_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>17 ingredient_id 연결</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>실제 주문 = 수요 - 품절손실</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>취소량은 주문량 이하</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>판매 수량 음수</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>매출 = 확정판매 × 메뉴가격</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>기말 재고 수지</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>실사 재고 수지</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BOM 환산 소진 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>일별 로트 합계 = 기말재고</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>전일 기말 = 당일 기초</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>입고 상세 = 재고 입고량</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>폐기 상세 = 재고 폐기량</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>이동 상세 = transfer_in_qty</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>이동 상세 = transfer_out_qty</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>04 사용 단위 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>10 사용 단위 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>13 사용 단위 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>14 사용 단위 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>16 사용 단위 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>입고 포장 단위 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>입고 포장 환산</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>발주 라인 금액</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>발주 공급사 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>발주 포장 단위 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>발주 수량 정수·최소수량</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>발주일 유효 단가 일치</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>품절 내역 = 재고 품절 표시</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>기간 내 도착 예정이나 입고 없는 발주</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>기간 밖 도착 예정 발주</td>
+      <td>WARN</td>
+      <td>25</td>
+      <td>데이터 종료 후 도착 예정이므로 미입고 오류가 아님</td>
+    </tr>
+    <tr>
+      <td>미취급 기간 판매</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>일별 패널 행수</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>일별 패널 기본키</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>적용 단가 누락</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>미래 단가 사용</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>음수 기말재고</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>마감 후 만료 로트 잔량</td>
+      <td>PASS</td>
+      <td>0</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table></div><p>첫날 과거 평균은 이력이 없으므로 빈값입니다. 당일 소진·폐기·기말·품절·수요는 사후 분석용이며 아침 예측 입력에 쓰지 않습니다. 당일 실사재고는 07시 입고와 실사 이후 사용할 수 있습니다.</p><p>기간 밖 입고 예정 25건은 오류가 아닙니다. 로트 합계는 일별 재고와 일치하나 명세서에 알려진 세부 로트 전개 차이는 재생 검증 범위 밖입니다. 취소가 없었을 잠재 수요는 제공되지 않으며 합성 보정수요는 demand_qty − cancel_qty로 정의했습니다.</p></details>
+<p class="muted">원본: 제공 CSV 01~17 및 행사 당일 데이터명세서. 전처리와 집계는 pipeline.py로 재실행할 수 있습니다. 원본 데이터와 파생 상세 데이터는 공개 저장소에 올리지 마세요.</p></main></html>

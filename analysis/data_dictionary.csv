@@ -1,0 +1,60 @@
+﻿column,dtype,available_at,definition
+date,datetime64[ns],공통,"기준일, 한 행은 날짜×매장×식자재"
+store_id,object,공통·마스터,"10_inventory_daily.csv의 store_id를 행별로 그대로 유지한 매장 연결 키. 이 값으로 01_stores.csv의 store_id와 병합하며 수치 계산·집계 없음. 단위: 매장 ID(문자, S01~S03); use_unit/order_unit/원에 해당하지 않음."
+ingredient_id,object,공통·마스터,"10_inventory_daily.csv의 ingredient_id를 행별로 그대로 유지한 식자재 연결 키. 이 값으로 03_ingredients.csv의 ingredient_id 및 식자재별 집계·단가 이력을 연결하며 수치 계산 없음. 단위: 식자재 ID(문자, I001~I022); use_unit/order_unit/원에 해당하지 않음."
+use_unit,object,공통·마스터,10_inventory_daily.csv의 use_unit을 그대로 유지. 03_ingredients.csv 및 관련 이력의 동일 식자재 use_unit과 일치하는지 검증하며 환산·집계 없음. 단위: 사용 단위명(개/g/ml/매/캔/장 등); 해당 행의 재고·소진·폐기·이동 수량을 해석하는 기준으로 order_unit 및 원과 구분.
+opening_qty,int64,당일 아침,"07시 입고 전 기초재고, use_unit"
+received_qty,int64,당일 아침,"07시 입고량, use_unit"
+adjust_qty,int64,당일 아침,"실사 조정량, use_unit"
+counted_qty,int64,당일 아침,"입고·실사 이후 사용 가능 재고, use_unit"
+consumed_qty,int64,사후,제공 CSV 동일 컬럼 정의
+waste_qty,int64,사후,제공 CSV 동일 컬럼 정의
+transfer_in_qty,int64,사후,제공 CSV 동일 컬럼 정의
+transfer_out_qty,int64,사후,제공 CSV 동일 컬럼 정의
+closing_qty,int64,사후,제공 CSV 동일 컬럼 정의
+closing_value,int64,사후,제공 CSV 동일 컬럼 정의
+stockout_flag,int64,사후,제공 CSV 동일 컬럼 정의
+emergency_flag,int64,사후,제공 CSV 동일 컬럼 정의
+avg_consumption_7d,float64,사후,"제공 평균: 당일 포함, 예측 입력 사용 금지"
+low_stock_flag,int64,사후,제공 CSV 동일 컬럼 정의
+overstock_flag,int64,사후,제공 CSV 동일 컬럼 정의
+bom_consumed_qty,float64,사후,"(실제 주문−취소)×해당 메뉴 BOM, use_unit"
+synthetic_need_qty,float64,사후·합성 전용,"(품절 전 수요−실제 취소)×세트 포함 해당 메뉴 BOM, use_unit"
+synthetic_lost_need_qty,float64,사후·합성 전용,"품절손실×BOM, 복수 식자재에 중복 귀속 가능. 품목 간 합산 금지"
+store_name,object,공통·마스터,01_stores.csv의 store_name을 store_id 기준 다대일 병합으로 연결. 매장별 일별 재고 행마다 동일 명칭을 부여하며 계산·집계 없음. 단위: 매장명(문자); use_unit/order_unit/원에 해당하지 않음.
+trade_area,object,공통·마스터,01_stores.csv의 trade_area를 store_id 기준 다대일 병합으로 연결. 원본 상권 분류를 그대로 사용하며 계산·집계 없음. 단위: 상권 유형(범주형 문자); use_unit/order_unit/원에 해당하지 않음.
+ingredient_name,object,공통·마스터,03_ingredients.csv의 ingredient_name을 ingredient_id 기준 다대일 병합으로 연결. 원본 식자재명을 그대로 사용하며 계산·집계 없음. 단위: 식자재명(문자); use_unit/order_unit/원에 해당하지 않음.
+supplier_id,object,공통·마스터,03_ingredients.csv의 supplier_id를 ingredient_id 기준 다대일 병합으로 연결한 식자재별 공급사 키. decision_features_daily.csv에서는 이 값으로 05_suppliers.csv의 supplier_id와 병합해 공급 조건을 추가하며 계산·집계 없음. 단위: 공급사 ID(문자); use_unit/order_unit/원에 해당하지 않음.
+order_unit,object,공통·마스터,"03_ingredients.csv의 order_unit을 ingredient_id 기준 다대일 병합으로 연결. 원본 발주 포장 단위명(박스/트레이/팩/EA/BOX 등)을 그대로 사용하며 계산·집계 없음. 단위: order_unit의 단위명; order_qty·min_order_qty는 이 기준 수량, unit_price는 원/order_unit이며 재고 수량의 use_unit과 구분."
+use_qty_per_order_unit,int64,공통·마스터,발주 단위 1개당 사용 단위 수량
+storage,object,공통·마스터,03_ingredients.csv의 storage를 ingredient_id 기준 다대일 병합으로 연결. 원본 보관 방식(냉동/냉장/상온)을 그대로 사용하며 계산·집계 없음. 단위: 보관 방식(범주형 문자); use_unit/order_unit/원에 해당하지 않음.
+shelf_life_days,int64,공통·마스터,입고일 포함 사용가능 일수
+min_order_qty,int64,공통·마스터,"품목별 최소 발주 수량, order_unit"
+weekday,object,공통·마스터,"07_calendar.csv의 weekday를 10_inventory_daily.csv의 date와 07_calendar.csv의 date가 일치하는 행에 다대일 병합으로 연결. 날짜에서 요일을 새로 계산하지 않고 제공된 요일값을 그대로 사용. 단위: 요일(월~일, 범주형 문자); use_unit/order_unit/원에 해당하지 않음."
+is_holiday,int64,공통·마스터,"07_calendar.csv의 is_holiday를 date 기준 다대일 병합으로 연결. 제공된 공휴일 표시를 그대로 사용하며 합산·비율 계산 없음. 단위: 무차원 0/1 표시(1=공휴일, 0=비공휴일); use_unit/order_unit/원에 해당하지 않음."
+holiday_name,object,공통·마스터,07_calendar.csv의 holiday_name을 date 기준 다대일 병합으로 연결. 원본 공휴일명을 그대로 사용하며 비공휴일의 공란은 해당 없음으로 보존. 단위: 공휴일명(문자); use_unit/order_unit/원에 해당하지 않음.
+waste_cost,float64,사후,"폐기 내역 가상 비용 합계, 원"
+received_use_qty,float64,당일 아침,"실제 입고 내역 집계, use_unit"
+order_qty,float64,사후,"당일 정기·긴급 발주 수량 합계, order_unit"
+order_amount,float64,사후,"당일 발주 가상 금액 합계, 원"
+regular_amount,float64,사후,"당일 정기발주 가상 금액, 원"
+emergency_amount,float64,사후,"당일 긴급발주 가상 금액, 원"
+lot_closing_qty,float64,사후,"마감 로트 잔량 합계, use_unit"
+closing_expiring_3d_qty,float64,사후,당일 마감 로트 중 다음 3일 이내 사용기한 도래 잔량
+valid_from,datetime64[ns],공통·마스터,06_ingredient_price_history.csv의 valid_from을 날짜형으로 변환한 뒤 ingredient_id가 같고 valid_from <= 기준일 date인 이력 중 가장 최근 행을 merge_asof(direction=backward)로 선택한 단가 적용 시작일. 해당 행의 unit_price를 함께 연결하며 미래 단가는 사용하지 않음. 단위: 날짜(YYYY-MM-DD); 연결된 unit_price의 단위는 가상 원/order_unit이며 valid_from 자체는 수량·금액이 아님.
+unit_price,int64,기준일 단가,"발주 포장단위당 가상 원화, valid_from≤date 최신"
+unit_cost_use,float64,기준일 단가,"unit_price÷use_qty_per_order_unit, 원/use_unit"
+consumed_cost,float64,사후,실제 소진×당일 사용단위당 가상 단가
+synthetic_lost_need_cost,float64,사후·합성 전용,"손실소요량×사용단위당 가상 단가. 손실매출 아님, 합산 금지"
+inventory_balance_diff,int64,검증,"기말−재고수지, 정상 0"
+bom_consumption_diff,float64,검증,"재고소진−BOM환산소진, 정상 0"
+consumed_avg_7d_past,float64,과거만,"당일 제외 이전 7일 실제 소진 평균, 첫날 미정"
+consumed_avg_28d_past,float64,과거만,당일 제외 이전 28일 실제 소진 평균
+stockout_days_7d_past,float64,과거만,당일 제외 이전 7일 품절 품목·일
+closing_qty_prev,float64,과거만,"전일 마감재고, 첫날 미정"
+stock_days_at_open,float64,당일 아침,"실사재고÷과거7일 소진평균, 평균0 또는 이력없음이면 미정"
+order_days,float64,공통·마스터,정기발주 가능 요일 목록
+order_cutoff,float64,공통·마스터,"정기발주 마감, 정각 제외"
+lead_time_days,float64,공통·마스터,발주 후 입고까지 일수
+delivery_days,float64,공통·마스터,입고 가능한 요일
+min_order_amount,float64,공통·마스터,"공급사 발주서별 최소 가상 금액, 원"
