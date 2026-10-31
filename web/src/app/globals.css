@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f1f1ed;
+  --foreground: #1b1b19;
+  --muted: #6a6a64;
+  --border: #e2e1dc;
+  --border-strong: #cfcec8;
+  /* 크라이치즈버거 브랜드 노랑 — 채움(버튼·활성 표시·오늘)에만. 위에 올리는 글자는 먹색 */
+  --brand: #ffcc00;
+  --on-brand: #1b1b19;
+  /* 흰 배경 위 글자·선용 진한 머스터드 (노랑 글자는 안 보임) — 대비 약 5:1 */
+  --accent: #8a6500;
+  --accent-soft: #fff6cc;
+  --high: #b93a2e;
+  --high-soft: #fbe9e6;
+  /* 경고는 브랜드 노랑과 헷갈리지 않게 주황 */
+  --medium: #c2410c;
+  --medium-soft: #ffedd5;
+  --low: #3a67ad;
+  --low-soft: #e6eefa;
+  --ring: color-mix(in srgb, var(--brand) 70%, transparent);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121211;
+    --surface: #1a1a18;
+    --surface-2: #222220;
+    --foreground: #ecebe6;
+    --muted: #9b9a93;
+    --border: #2c2b28;
+    --border-strong: #3b3a36;
+    --accent: #ffd84d;
+    --accent-soft: #332a0a;
+    --high: #ef7465;
+    --high-soft: #3a1f1b;
+    --medium: #fb923c;
+    --medium-soft: #3b2414;
+    --low: #82a8e8;
+    --low-soft: #1c2840;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .card { @apply rounded-[var(--radius)] border p-4; background: var(--surface); border-color: var(--border); }
+  .section-title { @apply text-[15px] font-semibold tracking-[-0.01em]; }
+  .hint { @apply text-xs leading-relaxed; color: var(--muted); }
+
+  .input {
+    @apply rounded-md border px-2.5 py-1.5 text-sm outline-none;
+    background: var(--surface); border-color: var(--border-strong);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+  .input:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+  .input[aria-invalid="true"] { border-color: var(--high); }
+
+  /* 누를 수 있는 것은 눌린 느낌을 준다 — 160ms, 강한 ease-out */
+  .btn, .btn-primary, .btn-ghost, .btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap select-none;
+    transition: transform 160ms var(--ease-out), background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  }
+  .btn { @apply border; border-color: var(--border-strong); background: var(--surface); }
+  .btn-primary { color: var(--on-brand); background: var(--brand); }
+  .btn-ghost { color: var(--muted); }
+  .btn-danger { color: var(--high); }
+  :is(.btn, .btn-primary, .btn-ghost, .btn-danger):active:not(:disabled) { transform: scale(0.97); }
+  :is(.btn, .btn-primary, .btn-ghost, .btn-danger):focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+  :is(.btn, .btn-primary, .btn-ghost, .btn-danger):disabled { @apply cursor-not-allowed; opacity: 0.45; }
+  @media (hover: hover) and (pointer: fine) {
+    .btn:hover:not(:disabled) { background: var(--surface-2); }
+    .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--brand) 88%, black); }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--foreground); }
+    .btn-danger:hover:not(:disabled) { background: var(--high-soft); }
+    .row-hover:hover { background: var(--surface-2); }
+  }
+
+  /* 세그먼트 탭 */
+  .tabs { @apply inline-flex gap-0.5 rounded-lg p-0.5; background: var(--surface-2); }
+  .tab {
+    @apply rounded-md px-3 py-1.5 text-sm font-medium;
+    color: var(--muted);
+    transition: background-color 150ms ease, color 150ms ease, transform 160ms var(--ease-out);
+  }
+  .tab:active { transform: scale(0.97); }
+  .tab:is([aria-selected="true"], [aria-checked="true"]) { background: var(--surface); color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+
+  .badge { @apply inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold leading-none whitespace-nowrap; }
+  .badge-high { background: var(--high-soft); color: var(--high); }
+  .badge-medium { background: var(--medium-soft); color: var(--medium); }
+  .badge-low { background: var(--low-soft); color: var(--low); }
+  .badge-accent { background: var(--accent-soft); color: var(--accent); }
+  .badge-muted { background: var(--surface-2); color: var(--muted); }
+
+  /* 저장 결과 메시지: 아래에서 살짝 떠오르며 등장 (자주 보지 않는 피드백이라 짧게만) */
+  .status {
+    @apply rounded-md px-3 py-2 text-sm;
+    transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+    @starting-style { opacity: 0; transform: translateY(4px); }
+  }
+  .status-ok { background: var(--accent-soft); color: var(--accent); }
+  .status-err { background: var(--high-soft); color: var(--high); }
+
+  .tbl { @apply w-full text-sm; border-collapse: separate; border-spacing: 0; }
+  .tbl th { @apply border-b px-2 py-2 text-left text-xs font-medium whitespace-nowrap; border-color: var(--border); color: var(--muted); }
+  .tbl td { @apply border-b px-2 py-2 align-top; border-color: var(--border); }
+  .tbl tbody tr:last-child td { border-bottom: 0; }
+  .num, .tbl th.num { @apply text-right tabular-nums; }
+
+  .dropzone {
+    @apply flex flex-col items-center justify-center gap-1 rounded-[var(--radius)] border-2 border-dashed px-4 py-8 text-center text-sm;
+    border-color: var(--border-strong); color: var(--muted);
+    transition: border-color 150ms ease, background-color 150ms ease;
+  }
+  .dropzone[data-over="true"] { border-color: var(--brand); background: var(--accent-soft); color: var(--accent); }
+
+  /* 활성 메뉴: 노란 막대 + 연한 노랑 배경 */
+  .nav-active { background: var(--accent-soft) !important; color: var(--foreground) !important; box-shadow: inset 3px 0 0 var(--brand); font-weight: 600; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.btn, .btn-primary, .btn-ghost, .btn-danger, .tab):active:not(:disabled) { transform: none; }
+  .status { transition: opacity 200ms ease; @starting-style { transform: none; } }
+}

@@ -1,0 +1,3 @@
+store_id,store_name,trade_area,store_type,open_hour,close_hour,dine_in,delivery,relative_size
+S01,강남점,오피스,단독,10,22,Y,Y,1.0
+S02,홍대점,대학가,단독,11,23,Y,N,0.8

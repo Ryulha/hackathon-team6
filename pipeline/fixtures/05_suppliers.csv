@@ -1,0 +1,3 @@
+supplier_id,supplier_name,order_days,order_cutoff,lead_time_days,delivery_days,min_order_amount,note
+SP1,냉동물류,"월,수,금",14:00,2,"화,목,토",100000,냉동 전용
+SP2,신선채소,"월,화,수,목,금,토",11:00,1,"화,수,목,금,토,일",30000,

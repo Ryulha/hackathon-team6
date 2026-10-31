@@ -1,0 +1,5 @@
+ingredient_id,ingredient_name,supplier_id,use_unit,order_unit,use_qty_per_order_unit,storage,shelf_life_days,min_order_qty
+I01,번,SP1,개,박스,50,냉동,30,1
+I02,불고기패티,SP1,g,팩,2000,냉동,20,1
+I03,양상추,SP2,g,박스,1000,냉장,4,1
+I04,감자,SP2,g,박스,5000,냉동,60,1
