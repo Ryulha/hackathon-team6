@@ -1,7 +1,8 @@
 // 손으로 만든 소형 픽스처(제공 데이터 아님)로 계산 규칙 검증
 import { describe, expect, it } from "vitest";
 import type { Ingredient, Snapshot, Supplier } from "../types";
-import { addDays, parseList, parseWeekdays, shortDate, weekdayOf } from "./dates";
+import { addDays, parseList, parseWeekdays, range, shortDate, weekdayOf } from "./dates";
+import { forecastMenus } from "./forecast";
 import { runEngine } from "./index";
 import { planIngredient } from "./ordering";
 import { simulate } from "./lots";
@@ -92,12 +93,12 @@ function snapshot(stock: number, opt: { ing?: Partial<Ingredient>; hist?: Demand
   return {
     meta: {
       asOf, storeId: "S1", dataStart: "2026-09-01", dataEnd: "2026-10-04", providedEnd: "2026-10-04", source: "json", fixture: true,
-      overlay: { countedToday: [], estimated: false, uploadedThrough: null, masterEdits: [], priceEntries: 0, appOrders: 0 },
+      overlay: { countedToday: [], morningAdjusted: [], estimated: false, uploadedThrough: null, masterEdits: [], priceEntries: 0, appOrders: 0 },
     },
     stores: [], menus: [{ menu_id: "M1", menu_name: "버거", category: "", is_set: 0, set_components: "", virtual_price: 5000 }],
     ingredients: [{ ...ing, ...opt.ing }], bom: [{ menu_id: "M1", ingredient_id: "I1", qty_per_menu: 100, use_unit: "g" }],
     suppliers: [sup], prices: [{ ingredient_id: "I1", valid_from: "2026-01-01", unit_price: 20000 }],
-    calendar: [], holidays: [], promotions: [], menuAvailability: [], demandHistory: hist,
+    calendar: [], holidays: [], mlForecast: [], mlModel: null, promotions: [], menuAvailability: [], demandHistory: hist,
     dailyTotals: hist.map((h) => ({ date: h.date, y: h.demand_qty - h.cancel_qty })), inventoryHistory: [],
     lots: stock ? [{ date: "2026-10-04", store_id: "S1", ingredient_id: "I1", lot_id: "L1", receipt_date: "2026-10-01", last_use_date: "2026-10-30", remaining_qty: stock, use_unit: "g" }] : [],
     openOrders: [],
@@ -142,13 +143,14 @@ describe("runEngine (팀 발주 최적화 규칙)", () => {
     const calm = runEngine(snapshot(20000), DEFAULT_SETTINGS, { I1: 1 });
     expect(calm.orders[0].fix?.urgent).toBe(false);
   });
-  it("z: 장기 품목은 최소 2.05, 최근 28일 품절이면 +0.36 (최대 2.33)", () => {
+  it("z (팀 3차): 보통 3.0, 장기 품목 최소 2.33은 이미 넘으므로 그대로, 최근 품절 상향은 0", () => {
     const longShelf = runEngine(snapshot(2500), DEFAULT_SETTINGS).plans[0];
-    expect(longShelf.zUsed).toBe(OPT.zLong);
-    expect(longShelf.zReasons).toHaveLength(1);
+    expect(longShelf.zUsed).toBe(3.0);
+    expect(OPT.zLong).toBe(2.33);
+    expect(longShelf.zReasons).toHaveLength(0);
     const withStockout = runEngine(snapshot(2500, { stockouts: ["2026-10-01", "2026-10-02"] }), DEFAULT_SETTINGS).plans[0];
-    expect(withStockout.zUsed).toBe(OPT.zMax);
-    expect(withStockout.stockouts28).toBe(2);
+    expect(withStockout.zUsed).toBe(3.0);
+    expect(withStockout.stockouts28).toBe(2); // 품절 이력은 근거 표시용으로만
     const old = runEngine(snapshot(2500, { stockouts: ["2026-08-01"] }), DEFAULT_SETTINGS).plans[0];
     expect(old.stockouts28).toBe(0); // 28일 밖은 무시
   });
@@ -157,20 +159,44 @@ describe("runEngine (팀 발주 최적화 규칙)", () => {
     const loose = runEngine(snapshot(6000, opt), { ...DEFAULT_SETTINGS, serviceLevel: "loose" }).plans[0];
     const tight = runEngine(snapshot(6000, opt), { ...DEFAULT_SETTINGS, serviceLevel: "tight" }).plans[0];
     expect(loose.sigma).toBeGreaterThan(0);
-    expect(loose.safetyStock).toBeCloseTo(2.05 * loose.sigma * Math.sqrt(3));
+    expect(loose.safetyStock).toBeCloseTo(3.5 * loose.sigma * Math.sqrt(3));
     expect(loose.safetyStock).toBeGreaterThan(tight.safetyStock);
     expect(loose.recBeforeCut).toBeGreaterThanOrEqual(tight.recBeforeCut);
   });
   it("폐기 고려 감량: 마지막 팩들이 기한 안에 못 쓰여 버려지면 품절이 안 늘 때까지 줄임", () => {
-    // 사용기한 2일, 1팩 1000g, 하루 1000g, 재고 0, 변동폭 677g → 안전재고 ≈1501g → 필요 3501g → 4팩
+    // 사용기한 2일, 1팩 1000g, 하루 1000g, 재고 0, 변동폭 354g → 안전재고 3.0×354×√2 ≈1502g → 필요 3502g → 4팩
     // 4팩이면 10/8~9 에 2000g 쓰고 2000g 폐기 → 3팩·2팩은 품절 그대로 폐기만 감소 → 1팩은 품절 증가 → 2팩
     const s = snapshot(0, { ing: { shelf_life_days: 2, min_order_qty: 1 } });
     const need = new Map(Array.from({ length: 30 }, (_, i) => [addDays("2026-10-05", i), 1000]));
-    const p = planIngredient(s, s.ingredients[0], need, DEFAULT_SETTINGS, { sigma: 677, stockouts28: 0 });
-    expect(p.zUsed).toBe(1.28);
+    const p = planIngredient(s, s.ingredients[0], need, DEFAULT_SETTINGS, { sigma: 354, stockouts28: 0 });
+    expect(p.zUsed).toBe(3.0);
     expect(p.recBeforeCut).toBe(4);
     expect(p.recommendedUnits).toBe(2);
     expect([p.wasteBefore, p.wasteAfter]).toEqual([2000, 0]);
+  });
+});
+
+describe("예측 (팀 3차 + CatBoost)", () => {
+  it("메뉴 수준 = 최근 7일 × 0.5 + 4주 × 0.5", () => {
+    // 4주 중 앞 21일 10개, 최근 7일 20개 → 4주 평균 12.5, 최근 20 → 16.25개 = 1625g
+    const r = runEngine(snapshot(50000, { hist: history("2026-10-05", (i) => (i >= 21 ? 20 : 10)) }), DEFAULT_SETTINGS);
+    expect(r.basis[0].level).toBeCloseTo(16.25);
+  });
+  it("최근 2일이 평소의 1.2배 이상이면 앞 3일만 올림", () => {
+    const r = runEngine(snapshot(50000, { hist: history("2026-10-05", (i) => (i >= 26 ? 20 : 10)) }), DEFAULT_SETTINGS);
+    // 요일 보정 때문에 2배가 아니라 약 1.68배로 잡힘(팀 엔진과 같은 계산)
+    expect(r.ctx.surgeRatio).toBeGreaterThan(1.2);
+    expect(r.ctx.surgeMult).toBeCloseTo(Math.min(1 + (r.ctx.surgeRatio - 1), 2));
+    const flat = { ...r.ctx, dowIdx: { 월: 1, 화: 1, 수: 1, 목: 1, 금: 1, 토: 1, 일: 1 }, surgeMult: 1.5 };
+    const q = forecastMenus([{ menuId: "M1", level: 10, sampleDays: 28 }], [], "S1", range("2026-10-05", "2026-10-09"), flat, DEFAULT_SETTINGS).map((f) => f.qty);
+    expect(q).toEqual([15, 15, 15, 10]);
+  });
+  it("CatBoost 예측이 있는 날은 그 값, 없는 날·'규칙만'이면 규칙 기반", () => {
+    const s = { ...snapshot(50000), mlForecast: [{ date: "2026-10-05", menuId: "M1", qty: 33 }], mlModel: "upto_0930" };
+    const ml = runEngine(s, DEFAULT_SETTINGS).forecast;
+    expect([ml[0].qty, ml[0].source, ml[1].qty, ml[1].source]).toEqual([33, "ml", 10, "rule"]);
+    const rule = runEngine(s, { ...DEFAULT_SETTINGS, forecastModel: "rule" }).forecast;
+    expect([rule[0].qty, rule[0].source]).toEqual([10, "rule"]);
   });
 });
 

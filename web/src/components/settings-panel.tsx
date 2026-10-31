@@ -5,7 +5,7 @@ import { addDays } from "@/lib/engine/dates";
 import { useApp } from "@/state/app-state";
 
 /** 추천 설정 페이지에서 다루는 항목 */
-export const CALC_KEYS = ["demandAdjustPct", "lookbackWeeks", "applyPromo", "serviceLevel", "leadTimeBufferDays", "expiryWarnDays", "overstockDays"] as const satisfies readonly (keyof EngineSettings)[];
+export const CALC_KEYS = ["forecastModel", "demandAdjustPct", "lookbackWeeks", "applyPromo", "serviceLevel", "leadTimeBufferDays", "expiryWarnDays", "overstockDays"] as const satisfies readonly (keyof EngineSettings)[];
 
 /** 로그인한 사람(매장·역할)과 로그아웃. compact = 휴대폰 위쪽 막대용 */
 export function SettingsPanel({ compact = false }: { compact?: boolean }) {

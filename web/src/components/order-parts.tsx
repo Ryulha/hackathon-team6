@@ -50,7 +50,9 @@ export function MinFix({ o, setOverride }: { o: SupplierOrder; setOverride: (id:
 }
 
 export function Basis({ p }: { p: IngredientPlan }) {
-  const { snapshot, settings } = useApp();
+  const { snapshot, settings, result } = useApp();
+  const mlDays = new Set(result?.forecast.filter((f) => f.source === "ml").map((f) => f.date)).size;
+  const surge = result && result.ctx.surgeMult > 1 ? result.ctx : null;
   const insights = useInsights(snapshot?.meta.storeId);
   const ing = p.ingredient;
   // 포장 단위 경고: 1박스가 며칠치인지 vs 사용기한 (분석: 양상추 1박스가 매장마다 0.45~1.29일치)
@@ -58,6 +60,7 @@ export function Basis({ p }: { p: IngredientPlan }) {
   const packRisk = Number.isFinite(packDays) && packDays > ing.shelf_life_days * 0.5;
   const coverage = insights?.packCoverage.find((c) => c.store_id === snapshot?.meta.storeId && ing.ingredient_name.includes("양상추"));
   const counted = snapshot?.meta.overlay.countedToday.includes(ing.ingredient_id);
+  const morningAdj = snapshot?.meta.overlay.morningAdjusted.find((m) => m.ingredient_id === ing.ingredient_id);
   const edited = snapshot?.meta.overlay.masterEdits.filter((e) => e.entity_id === ing.ingredient_id || e.entity_id === ing.supplier_id) ?? [];
   const main = (q: number) => (q ? describeQty(q, ing).main : "—");
   const days = p.slot && p.nextSlot ? diffDays(p.nextSlot.arrivalDate, p.slot.arrivalDate) : 0;
@@ -69,7 +72,7 @@ export function Basis({ p }: { p: IngredientPlan }) {
           <ol className="mt-1 ml-4 flex list-decimal flex-col gap-1">
             <li>이번 발주는 <b>{shortDate(p.slot.arrivalDate)}</b>에 도착하고, 그다음 발주는 <b>{shortDate(p.nextSlot.arrivalDate)}</b>에 도착합니다. 그 사이 <b>{days}일</b>을 버텨야 합니다.
               {p.slot.shiftedDays > 0 && <span className="hint"> (입고 가능 요일에 맞춰 {p.slot.shiftedDays}일 늦게 도착)</span>}</li>
-            <li>그 {days}일 동안 쓸 양은 <b>{fmtQty(p.windowNeed, ing)}</b>로 예상합니다. 최근 {settings.lookbackWeeks}주 판매 수준 × 요일별 차이 × 공휴일 효과 × 메뉴별 사용량(BOM)으로 계산했습니다{settings.demandAdjustPct ? ` (수요 ${settings.demandAdjustPct > 0 ? "+" : ""}${settings.demandAdjustPct}% 반영)` : ""}{settings.applyPromo ? " (행사 진행 가정)" : ""}.</li>
+            <li>그 {days}일 동안 쓸 양은 <b>{fmtQty(p.windowNeed, ing)}</b>로 예상합니다. {mlDays > 0 ? `앞 ${mlDays}일은 AI 수요예측(팀 CatBoost 모델), 그 뒤는 ` : ""}최근 {settings.lookbackWeeks}주 판매 수준(최근 7일을 절반 반영) × 요일별 차이 × 공휴일 효과에 메뉴별 사용량(BOM)을 곱해 계산했습니다{surge && mlDays === 0 ? ` · 최근 2일 판매가 평소의 ${surge.surgeRatio.toFixed(2)}배라 앞 3일은 ×${surge.surgeMult.toFixed(2)}` : ""}{settings.demandAdjustPct ? ` (수요 ${settings.demandAdjustPct > 0 ? "+" : ""}${settings.demandAdjustPct}% 반영)` : ""}{settings.applyPromo ? " (행사 진행 가정)" : ""}.</li>
             <li>하루 사용량이 예측에서 평소 <b>±{fmtQty(p.sigma, ing)}</b> 정도 벗어나서, &lsquo;{SERVICE_LEVELS[settings.serviceLevel].label}&rsquo; 기준으로 여유분 <b>{fmtQty(p.safetyStock, ing)}</b>를 더 잡았습니다.
               {p.zReasons.length > 0 && <span className="hint"> ({p.zReasons.join(", ")})</span>}</li>
             <li>지금 재고, 들어올 물량, 사용기한이 지나 버릴 양을 날짜별로 따져 보면 <b>{fmtQty(p.recommendedUse, ing)}</b>가 더 필요합니다.</li>
@@ -86,9 +89,10 @@ export function Basis({ p }: { p: IngredientPlan }) {
             {coverage && coverage.expiry_waste_events > 0 && <> 데이터 분석상 이 매장은 기간 중 기한 경과로 {coverage.expiry_waste_events}번, {won(coverage.expiry_waste_cost)}어치를 버렸습니다.</>}
           </p>
         )}
-        {(counted || snapshot?.meta.overlay.estimated || edited.length > 0) && (
+        {(counted || morningAdj || snapshot?.meta.overlay.estimated || edited.length > 0) && (
           <ul className="mt-2 ml-4 list-disc text-[var(--low)]">
             {counted && <li>지금 남은 양은 오늘 입력한 실사 수량입니다 (07시 입고분 포함).</li>}
+            {morningAdj && <li>지금 남은 양에 이날 아침 실사조정({morningAdj.adjust_qty > 0 ? "+" : ""}{fmtQty(morningAdj.adjust_qty, ing)})을 반영했습니다 (장부 대비).</li>}
             {!counted && snapshot?.meta.overlay.estimated && <li>지금 남은 양은 올린 판매 기록으로 계산한 추정치입니다. 실사 재고를 입력하면 정확해집니다.</li>}
             {edited.map((e, i) => <li key={i}>사용자가 바꾼 조건 적용: {e.field} = {e.value}</li>)}
           </ul>

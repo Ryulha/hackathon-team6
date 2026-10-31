@@ -46,6 +46,7 @@ export default function SettingsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card flex flex-col gap-5">
           <h3 className="section-title">수요 예측</h3>
+          <ModelControl />
           {num("lookbackWeeks", "예측에 쓸 과거 기간", "주", 1, 12, 1,
             <>최근 몇 주 판매로 메뉴별 평소 수준을 잡고, 여기에 <b>요일별 차이</b>(최근 {settings.lookbackWeeks * 2}주 매장 전체 판매 기준)와
               <b> 공휴일 효과</b>(과거 공휴일이 같은 요일 평일보다 몇 배였는지, 현재 ×{result.ctx.holMult.toFixed(2)})를 곱해 예측합니다.
@@ -62,7 +63,7 @@ export default function SettingsPage() {
             desc={<>판매는 날마다 들쭉날쭉해서 예측보다 많이 팔리는 날이 있습니다. 최근 8주 동안 하루 사용량이 예측에서 얼마나 벗어났는지(변동폭)를 재고,
               다음 입고까지 그 변동을 버틸 만큼 여유분을 더 주문합니다.
               {example && <> 예: {example.ingredient.ingredient_name}은 하루 변동폭이 약 {fmtQty(example.sigma, example.ingredient)}입니다.</>}
-              <span className="mt-1 block">사용기한 {OPT.longShelf}일 이상인 품목은 남아도 버릴 위험이 낮아 항상 &lsquo;넉넉하게&rsquo; 이상으로, 최근 {OPT.stockoutWindow}일 안에 품절된 품목은 한 단계 더 넉넉하게 잡습니다.</span></>}>
+              <span className="mt-1 block">기본 &lsquo;보통&rsquo;(z {SERVICE_LEVELS.normal.z})은 팀 백테스트(3~8월 튜닝, 9월 검증)에서 폐기·품절·재고 비용 합이 가장 적었던 값입니다. 연휴·행사처럼 판매가 크게 늘 때는 &lsquo;넉넉하게&rsquo;를 권합니다. 최근 {OPT.stockoutWindow}일 품절 기록은 근거로만 보여 줍니다(튜닝 결과 여유분을 늘려도 효과가 없었음).</span></>}>
             <div className="tabs w-full" role="radiogroup" aria-label="여유분 수준">
               {(Object.keys(SERVICE_LEVELS) as ServiceLevel[]).map((k) => (
                 <button key={k} role="radio" aria-checked={settings.serviceLevel === k}
@@ -108,6 +109,32 @@ function Control({ label, value, changed, desc, defaultText, children }: {
 }
 
 /** 행사 진행 가정 — 과거 행사 때의 메뉴별 판매 배수를 예측에 곱한다 (팀 엔진 promo_on) */
+/** 판매 예측 방법: 팀 CatBoost(앞 7일) / 규칙 기반 */
+function ModelControl() {
+  const { snapshot, result, settings, setSettings } = useApp();
+  const has = !!snapshot?.mlModel;
+  const mlDays = new Set(result!.forecast.filter((f) => f.source === "ml").map((f) => f.date)).size;
+  const OPTS = [{ key: "catboost", label: "AI 예측 (CatBoost)" }, { key: "rule", label: "규칙 기반" }] as const;
+  return (
+    <Control label="판매를 어떻게 예측할까요?" value={settings.forecastModel === "catboost" ? "AI 예측" : "규칙 기반"}
+      changed={settings.forecastModel !== DEFAULT_SETTINGS.forecastModel} defaultText="기본 AI 예측"
+      desc={<>
+        <b>AI 예측</b>은 팀이 만든 CatBoost 모델(1~7월 판매로 학습·검증, 8~9월 메뉴 예측 오차율 26.4% — 같은 요일 최근 4주 평균 28.7%보다 낮음)이 기준일부터 7일을 예측하고, 그 뒤는 규칙 기반으로 이어 붙입니다.
+        <b> 규칙 기반</b>은 최근 판매 수준 × 요일 × 공휴일 효과로 계산합니다(팀 발주 엔진 3차와 같은 값).
+        <span className="mt-1.5 block rounded-md bg-[var(--surface-2)] px-2.5 py-1.5 text-[var(--foreground)]">
+          {has ? <>이 기준일은 AI 예측 {mlDays}일 사용 중{snapshot?.mlModel === "upto_0930" ? " (9/30까지 판매로 학습한 모델)" : " (7/31까지 판매로 학습한 모델 — 이 기준일 이후 정답은 학습에 안 씀)"}</>
+            : <>이 기준일은 AI 예측이 없어 규칙 기반으로 계산합니다. (AI 예측은 8/1~10/1 기준일에 미리 계산해 둠)</>}
+        </span>
+      </>}>
+      <div className="tabs" role="radiogroup" aria-label="예측 방법">
+        {OPTS.map((o) => (
+          <button key={o.key} role="radio" aria-checked={settings.forecastModel === o.key} className="tab flex-1" onClick={() => setSettings({ forecastModel: o.key })}>{o.label}</button>
+        ))}
+      </div>
+    </Control>
+  );
+}
+
 function PromoControl() {
   const { snapshot, result, settings, setSettings } = useApp();
   const menuName = (id: string) => snapshot!.menus.find((m) => m.menu_id === id)?.menu_name ?? id;

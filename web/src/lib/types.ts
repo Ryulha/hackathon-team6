@@ -72,6 +72,8 @@ export type Snapshot = {
     overlay: {
       /** 기준일 실사 입력이 반영된 식자재 */
       countedToday: string[];
+      /** 제공 데이터의 기준일 아침 실사조정(adjust_qty)을 반영한 품목 */
+      morningAdjusted: { ingredient_id: string; adjust_qty: number }[];
       /** 제공 기간 이후 재고를 업로드 판매로 이어 계산했는지 (= 추정 재고) */
       estimated: boolean;
       uploadedThrough: string | null;
@@ -82,6 +84,10 @@ export type Snapshot = {
   };
   stores: Store[]; menus: Menu[]; ingredients: Ingredient[]; bom: BomRow[]; suppliers: Supplier[];
   prices: PriceRow[]; calendar: CalendarRow[]; promotions: Promotion[]; menuAvailability: MenuAvailability[];
+  /** 팀 CatBoost 7일 예측(기준일이 예측해 둔 날일 때만) — 판매 확정량(취소 반영) */
+  mlForecast: { date: string; menuId: string; qty: number }[];
+  /** 위 예측을 만든 모델 (예: upto_0930 = 9/30까지 판매로 학습) */
+  mlModel: string | null;
   /** 공휴일: 제공 calendar + 그 이후는 대한민국 공휴일 캘린더(구글 공개 캘린더) 연동, 못 받으면 가정값 */
   holidays: Holiday[];
   /** 기준일 전 lookback 기간 일별 수요 */

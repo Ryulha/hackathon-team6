@@ -23,7 +23,8 @@ export function runEngine(snap: Snapshot, s: EngineSettings, overrides: Override
   const holidays = holidaySet(snap.calendar, snap.holidays.map((h) => h.date));
   const ctx = forecastContext(new Map(snap.dailyTotals.map((t) => [t.date, t.y])), asOf, holidays, s);
   const basis = menuBasis(snap.demandHistory, snap.menus, snap.menuAvailability, snap.promotions, storeId, asOf, ctx, s);
-  const forecast = forecastMenus(basis, snap.menuAvailability, storeId, dates, ctx, s);
+  const ml = new Map(snap.mlForecast.map((f) => [`${f.date}|${f.menuId}`, f.qty]));
+  const forecast = forecastMenus(basis, snap.menuAvailability, storeId, dates, ctx, s, ml);
   const needs = ingredientNeeds(forecast, snap.bom);
   const sigma = ingredientSigma(snap.demandHistory, snap.bom, storeId, asOf);
 

@@ -1,6 +1,7 @@
 // 수요 예측 — 팀 발주 최적화 엔진(feature/order-optimization, engine.py forecast_menus·ingredient_sigma)을 TS로 옮김
 import type { BomRow, CalendarRow, DailyDemand, Menu, MenuAvailability, Promotion } from "../types";
 import { WEEKDAYS, addDays, parseList, range, weekdayOf, type Weekday } from "./dates";
+import { OPT } from "./settings";
 
 export type ForecastSettings = {
   /** 메뉴 수준(최근 판매 평균)을 낼 기간. 요일 지수는 그 2배 기간으로 계산 */
@@ -9,6 +10,8 @@ export type ForecastSettings = {
   demandAdjustPct: number;
   /** 행사 진행 가정: 과거 행사 때의 메뉴별 판매 배수를 예측에 곱한다 */
   applyPromo: boolean;
+  /** catboost: 팀 CatBoost 예측이 있는 날(기준일부터 7일)은 그 값 사용, 나머지는 규칙 기반 / rule: 규칙 기반만 */
+  forecastModel: "catboost" | "rule";
   /** 다가오는 공휴일마다 점장이 고른 운영 방식 (없으면 auto) */
   holidayPlan?: Record<string, HolidayMode>;
 };
@@ -42,9 +45,13 @@ export type ForecastContext = {
   /** 공휴일 판매 배수 (과거 공휴일 / 직전 5주 같은 요일 평일, 중앙값) */
   holMult: number;
   holidays: Set<string>;
+  /** 최근 2일 매장 판매(요일 보정) ÷ 평소 — 1.2 이상이면 급증 징후 */
+  surgeRatio: number;
+  /** 앞 3일 예측에 곱하는 배수 (급증 없으면 1) */
+  surgeMult: number;
 };
 
-export type MenuForecast = { date: string; menuId: string; qty: number; holiday: boolean; available: boolean };
+export type MenuForecast = { date: string; menuId: string; qty: number; holiday: boolean; available: boolean; source: "ml" | "rule" };
 
 export function isAvailable(av: MenuAvailability[], storeId: string, menuId: string, date: string): boolean {
   const rows = av.filter((r) => r.store_id === storeId && r.menu_id === menuId).sort((a, b) => a.start_date.localeCompare(b.start_date));
@@ -84,7 +91,13 @@ export function forecastContext(totals: Map<string, number>, asOf: string, holid
     const same = past.filter(([d]) => d < h && d >= addDays(h, -35) && weekdayOf(d) === weekdayOf(h) && !holidays.has(d)).map(([, v]) => v);
     if (same.length && mean(same) > 0) ratios.push(y / mean(same));
   }
-  return { dowIdx, holMult: ratios.length ? median(ratios) : 1, holidays };
+  // 수요 급증 징후 (팀 엔진 3차): 최근 2일 ÷ 그 전 평소(기준일 28일 전 ~ 3일 전), 요일 보정·공휴일 제외
+  const adjOf = new Map(past.filter(([d]) => d >= addDays(asOf, -2 * L) && !holidays.has(d)).map(([d, y]) => [d, y / (dowIdx[weekdayOf(d)] || 1)]));
+  const rec = range(addDays(asOf, -OPT.surgeLookback), asOf).filter((d) => adjOf.has(d)).map((d) => adjOf.get(d)!);
+  const base = [...adjOf].filter(([d]) => d >= addDays(asOf, -28) && d < addDays(asOf, -OPT.surgeLookback)).map(([, v]) => v);
+  const surgeRatio = rec.length && base.length && mean(base) > 0 ? mean(rec) / mean(base) : 1;
+  const surgeMult = OPT.surgeGain > 0 && surgeRatio > OPT.surgeThreshold ? Math.min(1 + OPT.surgeGain * (surgeRatio - 1), OPT.surgeCap) : 1;
+  return { dowIdx, holMult: ratios.length ? median(ratios) : 1, holidays, surgeRatio, surgeMult };
 }
 
 /** 메뉴별 수준(요일 효과 제거 평균)과 행사 배수 */
@@ -112,25 +125,37 @@ export function menuBasis(
   return menus.map((m) => {
     const avail = days.filter((d) => isAvailable(av, storeId, m.menu_id, d));
     const vals = avail.map((d) => (y.get(`${d}|${m.menu_id}`) ?? 0) / (ctx.dowIdx[weekdayOf(d)] || 1));
+    // 팀 엔진 3차: 최근 7일(취급한 날) 수준과 전체 기간 수준을 반씩
+    const level = vals.length ? OPT.recentWeight * mean(vals.slice(-OPT.recentDays)) + (1 - OPT.recentWeight) * mean(vals) : 0;
     const r = promoRatios.get(m.menu_id);
-    return { menuId: m.menu_id, level: mean(vals), sampleDays: avail.length, promoMult: r ? median(r) : undefined };
+    return { menuId: m.menu_id, level, sampleDays: avail.length, promoMult: r ? median(r) : undefined };
   });
 }
 
+/**
+ * 메뉴별 일 판매 예측.
+ * ml: 팀 CatBoost 예측(`날짜|메뉴` → 판매 확정량) — 있으면 그날은 그 값을 쓰고(급증 보정은 모델이 최근 추세로 반영하므로 생략),
+ *     공휴일을 '평일처럼'으로 바꾼 날은 규칙 기반 평일 값으로 대신한다.
+ */
 export function forecastMenus(
   basis: MenuForecastBasis[], av: MenuAvailability[], storeId: string, dates: string[], ctx: ForecastContext, s: ForecastSettings,
+  ml?: Map<string, number>,
 ): MenuForecast[] {
   const adj = 1 + s.demandAdjustPct / 100;
   const out: MenuForecast[] = [];
   for (const b of basis) {
-    for (const d of dates) {
+    dates.forEach((d, k) => {
       const available = isAvailable(av, storeId, b.menuId, d);
       const holiday = ctx.holidays.has(d);
       const mode = holiday ? s.holidayPlan?.[d] ?? "auto" : "weekday";
-      let qty = available && mode !== "closed" ? b.level * ctx.dowIdx[weekdayOf(d)] * (mode === "auto" ? ctx.holMult : 1) : 0;
+      const mlQty = s.forecastModel === "catboost" && !(holiday && mode === "weekday") ? ml?.get(`${d}|${b.menuId}`) : undefined;
+      let qty = 0;
+      if (available && mode !== "closed") {
+        qty = mlQty ?? b.level * ctx.dowIdx[weekdayOf(d)] * (mode === "auto" ? ctx.holMult : 1) * (k < OPT.surgeDays ? ctx.surgeMult : 1);
+      }
       if (s.applyPromo && b.promoMult) qty *= b.promoMult;
-      out.push({ date: d, menuId: b.menuId, qty: qty * adj, holiday, available });
-    }
+      out.push({ date: d, menuId: b.menuId, qty: qty * adj, holiday, available, source: mlQty !== undefined ? "ml" : "rule" });
+    });
   }
   return out;
 }
