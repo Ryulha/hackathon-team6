@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import { won } from "@/components/format";
 import { DaysLeft, Qty } from "@/components/qty";
 import { useInsights } from "@/components/use-insights";
+import { OrderBriefing } from "@/components/order-briefing";
 import { SERVICE_LEVELS, type IngredientPlan, type SupplierOrder } from "@/lib/engine";
 import { diffDays, shortDate } from "@/lib/engine/dates";
 import { daysOf, describeQty, fmtQty } from "@/lib/engine/units";
@@ -46,6 +47,8 @@ export default function OrdersPage() {
         </div>
       </div>
       {saveMsg && <div role="status" className="status status-ok">{saveMsg}</div>}
+
+      <OrderBriefing />
 
       {result.orders.map((o) => (
         <section key={o.supplier.supplier_id + o.orderDate} className="card overflow-x-auto">
