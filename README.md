@@ -1,45 +1,93 @@
 # 식자재 발주 도우미 (해커톤 주제 1)
 
-과제·명세: `식자재_관리_및_발주_자동화_요구사항과_데이터명세서.md`
-⚠ 제공 CSV는 공개 저장소 게시 금지 — `data/raw/`, `*.csv`, 생성 JSON은 `.gitignore` 처리됨.
+매장의 판매 추세·재고·사용기한·공급사 발주 조건을 함께 따져 **오늘 무엇을 얼마나 발주해야 하는지** 추천하고, 그 이유를 보여주는 웹 서비스입니다.
+
+- **배포 주소**: https://hackathon-team6.vercel.app (로그인 없음)
+- 과제·데이터 명세: `식자재_관리_및_발주_자동화_요구사항과_데이터명세서.md`
+- ⚠ 제공 CSV는 저장소에 올리지 않습니다 — `data/raw/`, `*.csv`, 생성 JSON, `.env*`, `.vercel` 은 `.gitignore` 처리
+
+## 주요 기능
+
+| 화면 | 내용 |
+|---|---|
+| 대시보드 | **오늘 할 일**을 급한 순서로: 품절 위험 품목, 오늘 마감되는 공급사 발주(마감까지 남은 시간), 사용기한 임박, 과잉 재고. 처음 방문 안내 |
+| 발주 추천 | 공급사·발주일별 발주서. 품목마다 추천 수량과 **"왜 N박스인가요?"** 설명, 다음 입고 전까지 재고 흐름. 수량을 고치면 금액·최소 발주금액·예상 재고가 즉시 재계산. 임시 저장 / 발주 확정(모의) |
+| 재고·사용기한 | 품목별 남은 양·며칠 분량·가장 빠른 사용기한, 재고 흐름 차트(오늘·다음 입고 표시), 입고 묶음별 사용기한 |
+| 데이터 입력 | **실사 재고**(영업 전 센 수량), **기준정보**(공급사 발주 요일·마감·리드타임·최소금액, 포장 단위·최소 발주수량·사용기한, 단가), **판매 CSV 업로드**(사전 검사 후 반영). 모두 되돌리기 가능 |
+| 가정·근거 | 적용한 가정, 데이터 해석, 한계 |
+| 조건 설정(공통) | 매장, 기준일, 현재 시각, 수요 증감 %, 예측 기간, 안전재고, 입고 지연 대비, 임박·과잉 기준, 프로모션 반영 — 바꾸면 모든 화면이 바로 다시 계산 |
+
+수량은 g·ml 품목이면 포장 단위가 주 표시(예: `2.3BOX` / `11.5kg`), 개수 품목이면 개수가 주 표시이고, 항상 **며칠 분량**을 함께 보여줍니다.
 
 ## 구조
+
 ```
-data/raw/        제공 CSV 01~17 넣는 곳
-pipeline/        Python 전처리 (schema → validate → build → load_db)
-  fixtures/      개발용 합성 CSV (제공 데이터 아님, make_fixtures.py 로 생성)
-docs/            제출물 템플릿 + 추가 아이디어
-web/             Next.js 앱 (Vercel 배포)
-  src/lib/engine 발주·재고 계산 엔진 (순수 함수, vitest)
-  src/lib/data.ts 스냅샷 조회: DB 우선 → 실패 시 번들 JSON
-  src/db         Drizzle (app_* 테이블만 관리)
+data/raw/          제공 CSV 01~17 (git 제외)
+pipeline/          Python: 검증(validate) · 집계(build) · DB 적재(load_db)
+  fixtures/        개발용 합성 CSV (제공 데이터 아님)
+docs/              제출물 템플릿(데이터 사용·가정표, 서비스 설명) + 추가 아이디어
+web/               Next.js 16 앱 (Vercel)
+  src/lib/engine/  계산 엔진 — 순수 TS, 브라우저에서 실행 (예측·소요량·FEFO 재고 시뮬레이션·발주 일정·알림)
+  src/lib/overlays.ts  사용자 입력 검증·반영 (원본은 그대로, 입력을 덮어 계산)
+  src/lib/data.ts  서버: Neon DB 조회 → 실패 시 번들 JSON 폴백(읽기 전용)
+  src/app/api/     snapshot(기준일·매장별 데이터), inputs/[kind](사용자 입력), drafts(발주안)
+  src/db/          Drizzle 스키마 (app_* 테이블)
 ```
 
-## 10/31 데이터 공개 후 순서
+- **DB**: Neon Postgres (Vercel 연동). `raw_*`/`agg_*` = 제공 데이터(load_db.py가 적재), `app_*` = 사용자 입력(Drizzle 관리)
+- **계산 위치**: 서버는 기준일·매장 단위 데이터만 내려주고, 계산은 브라우저에서 해서 조건 변경이 즉시 반영됨
+
+## 핵심 계산 규칙 (명세서 기준)
+
+- 수요 예측은 판매량이 아니라 **품절 전 수요(`demand_qty`)** 기준, 최근 N주 같은 요일 평균 × 프로모션 효과. 미취급 기간은 제외
+- 소요량 = 메뉴 예측 × BOM. 세트는 세트 자체 BOM(구성품 합산 안 함)
+- 재고·소진은 사용단위, 발주는 포장 단위로 올림. 단가는 발주일 기준 `valid_from`
+- 하루 순서: 07시 입고 → 영업 전 실사 → 발주 판단 → 판매 소진(사용기한 빠른 묶음부터) → 마감 후 기한 도래분 폐기
+- **지금 남은 양** = 전날 마감 재고 + 오늘 07시 입고분 (발주 판단 시점)
+- 발주량 = 이번 입고일 ~ 다음 발주 입고 전날까지 필요량 + 안전재고 − (현재고·입고 예정·폐기 반영 후 남는 양)
+- 공급사 발주 요일·마감(정각 불가)·리드타임·입고 요일, 품목 최소 발주수량, 발주서 최소 금액 반영
+- 실사 입력: 감소분은 오래된 입고 묶음부터, 증가분은 가장 최근 묶음에 반영
+- 판매 업로드: 제공 기간 이후 재고를 판매(확정 수량 × BOM)로 이어 계산 → "추정 재고"로 표시, 실사 입력 시 보정
+
+## 지금까지 한 일
+
+1. **사전 준비 (10/30)** — 명세서 분석, 스택 결정(Next.js + Neon + Python 전처리), 엔진·파이프라인 뼈대, 합성 픽스처로 끝까지 검증
+2. **데이터 검증 (10/31)** — 실제 CSV 17개 검증: 키·단위·재고 등식·수량 관계·묶음 잔량 모두 일치 확인 (`pipeline/validate.py`)
+3. **배포 연결** — Vercel 프로젝트 설정(Root `web`, Next.js, Node 24), Neon DB 생성·연결, 제공 데이터 적재, 운영 배포
+4. **데이터 입력 기능** — 실사·기준정보·단가·판매 CSV 입력 API와 화면, 입력 검증, 되돌리기, 입력 반영 현황 표시
+5. **디자인 정리** — 공통 스타일(버튼 눌림 피드백, 포커스, 상태 메시지, 동작 줄이기 대응), 응답 속도 개선(마스터 캐시·병렬 조회)
+6. **사용성 개선** — 대시보드를 '오늘 할 일' 중심으로, 단위를 포장 단위·며칠 분량으로, 차트·근거 문구를 쉬운 말로. 이 과정에서 "지금 남은 양"에 오늘 입고분이 빠지던 문제와 예상 재고가 0으로 떨어져 보이던 문제 수정
+
+**검증**: 엔진·입력 규칙 자동 테스트 32개, 운영 환경에서 입력 API 왕복 시험 25항목(저장·덮어쓰기·거부·반영·삭제 후 원상복구) 통과.
+
+## 실행
+
 ```bash
-# 1) CSV 복사 → data/raw/
-py pipeline/validate.py            # 리포트: pipeline/reports/validation.md → 가정 확인
-py pipeline/build.py               # web/src/data/generated/*.json (폴백 데이터)
+# 데이터 검증·집계 (CSV를 data/raw/ 에 넣은 뒤)
+py pipeline/validate.py            # → pipeline/reports/validation.md
+py pipeline/build.py               # → web/src/data/generated/*.json (DB 장애 시 폴백)
 
-# 2) 로컬 확인
-cd web && npm run dev              # http://localhost:3000
-npm test                           # 엔진 테스트
+# 로컬 실행
+cd web
+vercel env pull .env.local         # 저장소 루트에서 실행 시: vercel env pull web/.env.local
+npm install && npm run dev         # http://localhost:3000
+npm test                           # 자동 테스트
 
-# 3) DB (최초 1회: Vercel 프로젝트 연결 + Marketplace에서 Neon 추가)
-vercel link && vercel env pull .env.local
-npm run db:push                    # app_* 테이블 생성
-cd .. && py pipeline/load_db.py    # raw_*/agg_* 적재
-
-# 4) 배포 (git 공개 저장소 없이 CLI로)
-cd web && vercel deploy --prod
+# DB (최초 1회 또는 스키마 변경 시)
+npm run db:push                    # app_* 테이블
+py ../pipeline/load_db.py          # raw_*/agg_* 적재 (다시 적재하면 재배포해 서버 캐시 비우기)
 ```
 
-## 데이터 없이 개발할 때
-```bash
-py pipeline/make_fixtures.py
-py pipeline/build.py --raw pipeline/fixtures
-```
-화면 상단에 "개발용 합성 픽스처" 경고가 뜹니다. 배포 전 반드시 실제 데이터로 `build.py`를 다시 실행하세요.
+## 배포
 
-## 10/31 확인할 TODO
-코드에서 `TODO(10/31)` 검색: 요일·목록 표기 형식, 리드타임 기준, receipts.status 코드, 가정 문구 갱신.
+- Vercel 프로젝트 `hackathon-team6`(devtools 팀)은 GitHub `sungminchoi0124/hackathon-team6`에 연결, **운영 브랜치는 `main`**
+- `feat/web-deploy`에 push → 미리보기 빌드 → `vercel promote <미리보기 URL>`로 운영 반영
+- 팀 저장소 `Ryulha/hackathon-team6`에도 같은 브랜치를 올림 (`git push team feat/web-deploy`)
+
+## 남은 일 / 한계
+
+- 공휴일 효과 미반영 (데이터 이후 기간 공휴일 정보 없음)
+- 발주 확정은 모의 구현 (공급사 연동 없음)
+- 제출 문서(`docs/`) 실제 수치 채우기
+- 추가 기능 후보: `docs/추가_아이디어.md` (매장 간 이동 제안, 대안별 비용 비교, 예측 정확도 백테스트 등)
+- 합성 데이터 기반 결과는 실제 매장 성과와 무관

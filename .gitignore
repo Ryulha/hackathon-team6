@@ -19,3 +19,6 @@ __pycache__/
 
 # vercel
 .vercel
+
+# 개인 작업 지침 (저장소에 올리지 않음)
+CLAUDE.md
