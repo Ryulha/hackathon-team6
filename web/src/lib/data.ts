@@ -64,24 +64,41 @@ const normalize = (r: Record<string, unknown>) => {
   return r;
 };
 
+/**
+ * 제공 데이터(raw_ 및 agg_ 테이블)는 실행 중에 바뀌지 않으므로, 필터 없는 마스터 조회와 기간 조회는 서버 인스턴스에 캐시해
+ * DB 왕복을 줄인다 (DB↔함수 왕복 1회 ≈ 수백 ms). load_db.py 로 다시 적재하면 재배포해 캐시를 비울 것.
+ */
+const dbCache = new Map<string, Promise<unknown>>();
+const cached = <T>(key: string, load: () => Promise<T>): Promise<T> => {
+  if (!dbCache.has(key)) dbCache.set(key, load().catch((e) => { dbCache.delete(key); throw e; }));
+  return dbCache.get(key) as Promise<T>;
+};
+
 const dbSource: Source | null = sql && {
   name: "db",
   async rows<T>(table: string, f: Filter = {}) {
-    const where: string[] = [];
-    const params: string[] = [];
-    if (f.store) { params.push(f.store); where.push(`store_id = $${params.length}`); }
-    const col = f.dateCol?.replace(/[^a-z_]/g, "");
-    if (col && f.from) { params.push(f.from); where.push(`"${col}" >= $${params.length}::date`); }
-    if (col && f.to) { params.push(f.to); where.push(`"${col}" < $${params.length}::date`); }
-    const q = `SELECT * FROM "${ident(table)}"${where.length ? ` WHERE ${where.join(" AND ")}` : ""}`;
-    const rows = (await sql!.query(q, params)) as Record<string, unknown>[];
-    return rows.map(normalize) as T[];
+    if (!f.store && !f.dateCol) return cached(`rows:${table}`, () => dbRows<T>(table, f));
+    return dbRows<T>(table, f);
   },
   async dataRange() {
-    const [r] = (await sql!.query(`SELECT min(date)::text AS start, max(date)::text AS "end" FROM raw_inventory_daily`)) as { start: string; end: string }[];
-    return { ...r, fixture: process.env.DATA_IS_FIXTURE === "1" };
+    return cached("range", async () => {
+      const [r] = (await sql!.query(`SELECT min(date)::text AS start, max(date)::text AS "end" FROM raw_inventory_daily`)) as { start: string; end: string }[];
+      return { ...r, fixture: process.env.DATA_IS_FIXTURE === "1" };
+    });
   },
 };
+
+async function dbRows<T>(table: string, f: Filter): Promise<T[]> {
+  const where: string[] = [];
+  const params: string[] = [];
+  if (f.store) { params.push(f.store); where.push(`store_id = $${params.length}`); }
+  const col = f.dateCol?.replace(/[^a-z_]/g, "");
+  if (col && f.from) { params.push(f.from); where.push(`"${col}" >= $${params.length}::date`); }
+  if (col && f.to) { params.push(f.to); where.push(`"${col}" < $${params.length}::date`); }
+  const q = `SELECT * FROM "${ident(table)}"${where.length ? ` WHERE ${where.join(" AND ")}` : ""}`;
+  const rows = (await sql!.query(q, params)) as Record<string, unknown>[];
+  return rows.map(normalize) as T[];
+}
 
 /** 사용자 입력(앱 테이블). DB 가 없으면 비어 있음 */
 export type Overlays = {
@@ -93,10 +110,9 @@ export type Overlays = {
 };
 const NO_OVERLAYS: Overlays = { counts: [], masterEdits: [], priceEntries: [], uploaded: [], drafts: [] };
 
-async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string | null, ov: Overlays): Promise<Snapshot> {
-  const range = await src.dataRange();
+async function buildSnapshot(src: Source, asOfIn: string | null, storeIn: string | null, ovIn: Overlays | Promise<Overlays>): Promise<Snapshot> {
+  const [range, stores, ov] = await Promise.all([src.dataRange(), src.rows<Store>("stores"), ovIn]);
   const providedEnd = range.end;
-  const stores = await src.rows<Store>("stores");
   const storeId = storeIn && stores.some((s) => s.store_id === storeIn) ? storeIn : stores[0]?.store_id ?? "";
   const uploaded = ov.uploaded.filter((u) => u.store_id === storeId);
   const dataEnd = uploaded.reduce((m, u) => (u.date > m ? u.date : m), providedEnd);
@@ -218,7 +234,8 @@ export async function masters() {
 export async function getSnapshot(asOf: string | null, storeId: string | null): Promise<Snapshot> {
   if (dbSource) {
     try {
-      return await buildSnapshot(dbSource, asOf, storeId, await loadOverlays(storeId));
+      // 사용자 입력 조회는 제공 데이터 조회와 동시에 (직렬 왕복 줄이기)
+      return await buildSnapshot(dbSource, asOf, storeId, loadOverlays(storeId));
     } catch (e) {
       console.error("[data] DB 조회 실패 → JSON 폴백", e);
     }

@@ -19,6 +19,8 @@ type AppState = {
   overrides: Overrides;
   setOverride: (ingredientId: string, units: number | undefined) => void;
   result: EngineResult | null;
+  /** 사용자 입력 저장 후 스냅샷 다시 받기 (화면 깜빡임 없이 교체) */
+  reload: () => void;
 };
 
 const Ctx = createContext<AppState | null>(null);
@@ -34,6 +36,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const loading = doneKey !== key;
   const [settings, setSettingsRaw] = useState<EngineSettings>(DEFAULT_SETTINGS);
   const [overrides, setOverrides] = useState<Overrides>({});
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     const q = new URLSearchParams();
@@ -46,7 +49,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       .then((s: Snapshot) => { setSnapshot(s); setError(null); setDoneKey(reqKey); })
       .catch((e) => { if (e.name !== "AbortError") { setError(String(e.message ?? e)); setDoneKey(reqKey); } });
     return () => ctl.abort();
-  }, [asOf, storeId]);
+  }, [asOf, storeId, version]);
 
   // 기준일·매장이 바뀌면 수정값 초기화 (다른 상황의 수량을 이어 쓰지 않도록)
   const setStoreId = useCallback((s: string) => { setStoreIdRaw(s); setOverrides({}); }, []);
@@ -60,10 +63,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const result = useMemo(() => (snapshot ? runEngine(snapshot, settings, overrides) : null), [snapshot, settings, overrides]);
 
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
+
   const value: AppState = {
-    snapshot, loading, error, asOf: asOf ?? snapshot?.meta.asOf ?? null, storeId: storeId ?? snapshot?.meta.storeId ?? null,
+    snapshot, loading, error,
+    // 서버가 기준일을 판매 기록 범위로 보정할 수 있으므로, 응답을 받은 뒤에는 서버 값을 표시
+    asOf: (!loading && snapshot?.meta.asOf) || asOf || snapshot?.meta.asOf || null,
+    storeId: storeId ?? snapshot?.meta.storeId ?? null,
     setAsOf: setAsOfReset, setStoreId, settings, setSettings, resetSettings: () => setSettingsRaw(DEFAULT_SETTINGS),
-    overrides, setOverride, result,
+    overrides, setOverride, result, reload,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

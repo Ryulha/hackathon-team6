@@ -28,19 +28,19 @@ export default function OrdersPage() {
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">발주 추천</h2>
+        <h2 className="text-lg font-semibold tracking-[-0.01em]">발주 추천</h2>
         <div className="flex items-center gap-2">
-          {saveMsg && <span className="text-sm text-[var(--muted)]">{saveMsg}</span>}
+          {saveMsg && <span role="status" className="status status-ok !py-1">{saveMsg}</span>}
           <button className="btn" onClick={() => save("draft")}>발주안 저장</button>
           <button className="btn-primary" onClick={() => save("submitted")}>발주 확정 (모의)</button>
         </div>
       </div>
-      <p className="text-sm text-[var(--muted)]">수량을 직접 고치면 예상 재고·최소 발주금액이 즉시 다시 계산됩니다. 행을 누르면 계산 근거를 볼 수 있습니다.</p>
+      <p className="hint">수량을 직접 고치면 예상 재고·최소 발주금액이 즉시 다시 계산됩니다. 행을 누르면 계산 근거를 볼 수 있습니다.</p>
 
       {result.orders.map((o) => (
         <section key={o.supplier.supplier_id + o.orderDate} className="card overflow-x-auto">
           <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <h3 className="font-semibold">{o.supplier.supplier_name}</h3>
+            <h3 className="section-title">{o.supplier.supplier_name}</h3>
             <span className="text-sm">발주 {o.orderDate} {o.cutoff} 마감{o.isToday && <b className="text-[var(--accent)]"> (오늘)</b>} → 입고 {o.arrivalDate}</span>
             <span className="text-sm">합계 <b>{won(o.amount)}</b></span>
             <span className="text-sm" style={{ color: o.belowMin ? "var(--high)" : "var(--muted)" }}>
@@ -52,7 +52,7 @@ export default function OrdersPage() {
       ))}
 
       <section className="card overflow-x-auto">
-        <h3 className="mb-2 font-semibold">이번 발주 불필요 품목</h3>
+        <h3 className="section-title mb-2">이번 발주 불필요 품목</h3>
         <PlanTable plans={result.plans.filter((p) => p.finalUnits <= 0)} open={open} setOpen={setOpen} overrides={overrides} setOverride={setOverride} />
       </section>
     </>
@@ -75,16 +75,16 @@ function PlanTable({ plans, open, setOpen, overrides, setOverride }: {
           const u = p.ingredient.use_unit;
           return (
             <Fragment key={id}>
-              <tr className="cursor-pointer hover:bg-[var(--background)]" onClick={() => setOpen(open === id ? null : id)}>
+              <tr className="row-hover cursor-pointer" aria-expanded={open === id} onClick={() => setOpen(open === id ? null : id)}>
                 <td>{p.ingredient.ingredient_name} <span className="text-xs text-[var(--muted)]">{id}</span></td>
                 <td className="num">{fmt(p.startStock)}{u}</td>
                 <td className="num">{fmt(p.avgDailyNeed, 1)}{u}</td>
                 <td className="num">{fmt(p.coverDays)}일</td>
                 <td className="num">{p.recommendedUnits}{p.ingredient.order_unit}</td>
                 <td onClick={(e) => e.stopPropagation()}>
-                  <input type="number" min={0} className="input w-20" value={overrides[id] ?? p.recommendedUnits}
+                  <input type="number" min={0} className="input w-20 text-right tabular-nums" value={overrides[id] ?? p.recommendedUnits}
                     onChange={(e) => setOverride(id, e.target.value === "" ? undefined : Math.max(0, Number(e.target.value)))} />
-                  {p.overridden && <button className="ml-1 text-xs text-[var(--accent)]" onClick={() => setOverride(id, undefined)}>되돌리기</button>}
+                  {p.overridden && <button className="btn-ghost ml-1 !px-1.5 !py-0.5 text-xs" onClick={() => setOverride(id, undefined)}>되돌리기</button>}
                 </td>
                 <td className="num">{won(p.amount)}</td>
                 <td className="text-xs">
@@ -103,10 +103,13 @@ function PlanTable({ plans, open, setOpen, overrides, setOverride }: {
 }
 
 function Basis({ p }: { p: IngredientPlan }) {
+  const { snapshot } = useApp();
   const ing = p.ingredient;
+  const counted = snapshot?.meta.overlay.countedToday.includes(ing.ingredient_id);
+  const edited = snapshot?.meta.overlay.masterEdits.filter((e) => e.entity_id === ing.ingredient_id || e.entity_id === ing.supplier_id) ?? [];
   const u = ing.use_unit;
   return (
-    <div className="grid gap-1 bg-[var(--background)] p-3 text-xs md:grid-cols-2">
+    <div className="grid gap-4 rounded-md bg-[var(--surface-2)] p-3 text-xs md:grid-cols-2">
       <div>
         <b>계산 근거</b>
         <ol className="ml-4 list-decimal">
@@ -119,6 +122,13 @@ function Basis({ p }: { p: IngredientPlan }) {
           <li>발주단위 환산: {fmt(p.recommendedUse)} ÷ {fmt(ing.use_qty_per_order_unit)}{u}/{ing.order_unit} → 올림 {p.recommendedUnits}{ing.order_unit} (최소 {ing.min_order_qty})</li>
           <li>단가: {won(p.unitPrice)}/{ing.order_unit} ({p.priceFrom}부터 적용)</li>
         </ol>
+        {(counted || snapshot?.meta.overlay.estimated || edited.length > 0) && (
+          <ul className="mt-1 ml-4 list-disc text-[var(--low)]">
+            {counted && <li>현재고: 기준일 실사 입력값 반영 (07시 입고 포함)</li>}
+            {!counted && snapshot?.meta.overlay.estimated && <li>현재고: 업로드 판매로 이어 계산한 추정치 — 실사 입력 시 정확해짐</li>}
+            {edited.map((e, i) => <li key={i}>사용자 수정 적용: {e.field} = {e.value}</li>)}
+          </ul>
+        )}
         {p.notes.length > 0 && <ul className="mt-1 ml-4 list-disc text-[var(--medium)]">{p.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
       </div>
       <div>
