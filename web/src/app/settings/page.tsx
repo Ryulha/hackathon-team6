@@ -36,8 +36,8 @@ export default function SettingsPage() {
     <>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <header>
-          <h2 className="text-xl font-bold tracking-[-0.02em]">계산 기준</h2>
-          <p className="hint mt-1">추천 수량과 알림을 어떤 기준으로 계산할지 정합니다. 바꾸면 모든 화면에 바로 반영되고, 아래에서 기본값과 비교한 변화를 볼 수 있습니다.</p>
+          <h2 className="text-xl font-bold tracking-[-0.02em]">추천 설정</h2>
+          <p className="hint mt-1">주문을 얼마나 넉넉하게 할지, 어떤 때 알려줄지 내 매장에 맞게 정해 보세요. 바꾸면 모든 화면에 바로 반영되고, 아래에서 처음 설정과 비교해 볼 수 있습니다.</p>
         </header>
         <button className="btn" disabled={!changed.length} onClick={reset}>모두 기본값으로</button>
       </div>

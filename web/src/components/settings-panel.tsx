@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, type EngineSettings } from "@/lib/engine";
 import { addDays } from "@/lib/engine/dates";
 import { useApp } from "@/state/app-state";
 
-/** 계산 기준 페이지에서 다루는 항목 (현재 시각은 매일 바꾸는 값이라 여기 남김) */
+/** 추천 설정 페이지에서 다루는 항목 (현재 시각은 매일 바꾸는 값이라 여기 남김) */
 export const CALC_KEYS = ["demandAdjustPct", "lookbackWeeks", "applyPromo", "safetyDays", "leadTimeBufferDays", "expiryWarnDays", "overstockDays"] as const satisfies readonly (keyof EngineSettings)[];
 
 /** 왼쪽 패널: 매일 바꾸는 값(매장·기준일·현재 시각)만 */
@@ -33,8 +33,8 @@ export function SettingsPanel() {
         <input type="time" className="input" value={settings.nowTime} onChange={(e) => setSettings({ nowTime: e.target.value })} />
       </label>
       <Link href="/settings" className="btn justify-between">
-        <span>계산 기준 조정</span>
-        {changed > 0 ? <span className="badge badge-accent">{changed}개 변경</span> : <span className="hint">기본값</span>}
+        <span>추천 방식 바꾸기</span>
+        {changed > 0 ? <span className="badge badge-accent">{changed}개 변경</span> : <span className="hint">기본</span>}
       </Link>
     </aside>
   );

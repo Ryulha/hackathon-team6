@@ -6,6 +6,7 @@ data/raw/*
 web/src/data/generated/*
 !web/src/data/generated/.gitkeep
 pipeline/reports/
+pipeline/.team_cache/
 
 # env
 .env

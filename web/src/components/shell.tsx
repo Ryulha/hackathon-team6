@@ -11,7 +11,7 @@ const NAV = [
   { href: "/orders", label: "발주 추천" },
   { href: "/inventory", label: "재고·사용기한" },
   { href: "/inputs", label: "데이터 입력" },
-  { href: "/settings", label: "계산 기준" },
+  { href: "/settings", label: "추천 설정" },
   { href: "/assumptions", label: "가정·근거" },
 ];
 

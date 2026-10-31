@@ -118,7 +118,7 @@ FOREIGN_KEYS: list[tuple[str, str, str, str]] = [
 
 PG_TYPES = {
     "id": "text", "str": "text", "list": "text", "int": "integer", "float": "double precision",
-    "date": "date", "flag01": "smallint", "yn": "text",
+    "date": "date", "flag01": "smallint", "yn": "text", "json": "jsonb",
 }
 
 

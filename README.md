@@ -57,13 +57,44 @@ web/               Next.js 16 앱 (Vercel)
 4. **데이터 입력 기능** — 실사·기준정보·단가·판매 CSV 입력 API와 화면, 입력 검증, 되돌리기, 입력 반영 현황 표시
 5. **디자인 정리** — 공통 스타일(버튼 눌림 피드백, 포커스, 상태 메시지, 동작 줄이기 대응), 응답 속도 개선(마스터 캐시·병렬 조회)
 6. **사용성 개선** — 대시보드를 '오늘 할 일' 중심으로, 단위를 포장 단위·며칠 분량으로, 차트·근거 문구를 쉬운 말로. 이 과정에서 "지금 남은 양"에 오늘 입고분이 빠지던 문제와 예상 재고가 0으로 떨어져 보이던 문제 수정
+7. **설정 분리·데이터 파이프라인** — 추천 설정을 별도 메뉴로(항목별 설명, 처음 설정과 비교), 팀 전처리 코드를 포함한 원클릭 파이프라인(`pipeline/run_all.py`)으로 Neon에 분석 표까지 적재
 
 **검증**: 엔진·입력 규칙 자동 테스트 32개, 운영 환경에서 입력 API 왕복 시험 25항목(저장·덮어쓰기·거부·반영·삭제 후 원상복구) 통과.
+
+## 데이터 파이프라인 (원본 CSV → 전처리 → Neon)
+
+원본 CSV 17개를 `data/raw/`에 넣고 **한 줄**로 실행합니다.
+
+```bash
+git remote add team https://github.com/Ryulha/hackathon-team6.git   # 최초 1회 (팀 전처리 코드 위치)
+vercel env pull web/.env.local                                       # 최초 1회 (DATABASE_URL)
+py pipeline/run_all.py
+```
+
+| 단계 | 하는 일 | 결과 |
+|---|---|---|
+| 1. 확인·검증 | 17개 파일 존재, 키·단위·재고 등식 등 점검 | `pipeline/reports/validation.md` |
+| 2. 팀 전처리·EDA | 팀 저장소 `main`의 `pipeline.py`(팀원 작성)를 **그대로** 받아 실행. 검증 FAIL이면 여기서 중단 | `pipeline/reports/analysis/` |
+| 3. 웹앱 집계 | 일별 수요·폐기 집계, DB 장애 시 쓸 JSON | `web/src/data/generated/` |
+| 4. Neon 적재 | `raw_*`(원본) · `agg_*`(웹앱 집계) · `ana_*`(팀 분석 표) · `ana_meta`(EDA 요약·원본 해시·실행 기록) | Neon |
+
+- **안전한 교체**: 모든 표를 `<이름>__new`에 먼저 넣고 한 트랜잭션 안에서 이름을 바꿔 교체합니다. 중간에 실패하면 기존 데이터가 그대로 남고, 운영 중인 앱은 반쯤 적재된 표를 보지 않습니다.
+- **팀 코드는 복사·수정하지 않음**: 실행할 때마다 `--team-ref`(기본 `team/main`)에서 최신 `pipeline.py`를 꺼내 씁니다. 어떤 커밋으로 만들었는지 `ana_meta`의 `run_info`에 남습니다.
+- 확인 결과: 같은 원본으로 실행한 결과가 팀 저장소에 올라온 `analysis/` 파일과 바이트 단위로 같습니다.
+
+| 옵션 | 용도 |
+|---|---|
+| `--no-db` | 적재 없이 결과 파일만 만들어 확인 |
+| `--skip-raw` | 원본·웹앱 집계는 그대로 두고 팀 분석 결과(`ana_*`)만 다시 적재 |
+| `--raw <폴더>` | 다른 위치의 원본 사용 |
+| `--team-ref <ref>` / `--team-script <경로>` | 다른 브랜치나 로컬 파일의 팀 코드 사용 |
+
+원본(`raw_*`)을 다시 적재했다면 Vercel을 재배포해 서버의 기준 데이터 캐시를 비우세요.
 
 ## 실행
 
 ```bash
-# 데이터 검증·집계 (CSV를 data/raw/ 에 넣은 뒤)
+# 단계별로 따로 돌릴 때
 py pipeline/validate.py            # → pipeline/reports/validation.md
 py pipeline/build.py               # → web/src/data/generated/*.json (DB 장애 시 폴백)
 
@@ -75,7 +106,7 @@ npm test                           # 자동 테스트
 
 # DB (최초 1회 또는 스키마 변경 시)
 npm run db:push                    # app_* 테이블
-py ../pipeline/load_db.py          # raw_*/agg_* 적재 (다시 적재하면 재배포해 서버 캐시 비우기)
+py ../pipeline/load_db.py          # raw_*/agg_* 만 적재 (전체는 run_all.py)
 ```
 
 ## 배포
