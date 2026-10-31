@@ -1,8 +1,10 @@
 // 사용자 입력 API — counts(실사) / master(기준정보) / prices(단가) / sales(판매 CSV)
 // 제공 원본은 건드리지 않고 app_* 테이블에만 쓴다. 삭제하면 원래 값으로 돌아간다.
+// 실사·판매 업로드는 로그인한 매장 것만, 기준정보·단가는 공급사·식자재 공통 조건이라 모든 매장 관리자가 함께 관리.
 import { and, asc, desc, eq, gt, ne, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { masterEdits, priceEntries, salesDaily, salesUploads, stockCounts } from "@/db/schema";
+import { requireSession } from "@/lib/auth/session";
 import { masters, storeDataEnds } from "@/lib/data";
 import { addDays } from "@/lib/engine/dates";
 import { validateCount, validateMasterEdit, validatePriceEntry, validateSalesCsv } from "@/lib/overlays";
@@ -21,24 +23,27 @@ async function kindOf(ctx: RouteContext<"/api/inputs/[kind]">): Promise<Kind | n
 export async function GET(req: Request, ctx: RouteContext<"/api/inputs/[kind]">) {
   const kind = await kindOf(ctx);
   if (!kind) return bad("알 수 없는 입력 종류", 404);
+  const sess = requireSession(req);
+  if (sess instanceof Response) return sess;
   if (!db) return noDb();
-  const store = new URL(req.url).searchParams.get("store");
   switch (kind) {
     case "counts":
       return Response.json(await db.select().from(stockCounts)
-        .where(store ? eq(stockCounts.storeId, store) : undefined).orderBy(desc(stockCounts.date), asc(stockCounts.ingredientId)));
+        .where(eq(stockCounts.storeId, sess.storeId)).orderBy(desc(stockCounts.date), asc(stockCounts.ingredientId)));
     case "master":
       return Response.json(await db.select().from(masterEdits).orderBy(desc(masterEdits.id)));
     case "prices":
       return Response.json(await db.select().from(priceEntries).orderBy(desc(priceEntries.id)));
     case "sales":
-      return Response.json(await db.select().from(salesUploads).orderBy(desc(salesUploads.id)));
+      return Response.json(await db.select().from(salesUploads).where(eq(salesUploads.storeIds, sess.storeId)).orderBy(desc(salesUploads.id)));
   }
 }
 
 export async function POST(req: Request, ctx: RouteContext<"/api/inputs/[kind]">) {
   const kind = await kindOf(ctx);
   if (!kind) return bad("알 수 없는 입력 종류", 404);
+  const sess = requireSession(req);
+  if (sess instanceof Response) return sess;
   const dryRun = new URL(req.url).searchParams.get("dryRun") === "1";
   if (!db && !dryRun) return noDb();
   const m = await masters();
@@ -49,6 +54,12 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inputs/[kind]">
     const { ends } = await storeDataEnds();
     const check = validateSalesCsv(text, m.stores, m.menus, ends);
     const summary = { ...check, daily: undefined, dailyRows: check.daily.length };
+    if (check.ok && check.storeIds.some((x) => x !== sess.storeId)) {
+      check.ok = false;
+      check.errorCount += 1;
+      check.errors.unshift(`다른 매장(${check.storeIds.filter((x) => x !== sess.storeId).join(", ")}) 판매가 들어 있습니다. 로그인한 매장(${sess.storeId}) 판매만 올릴 수 있습니다.`);
+      return bad("검증 실패", 422, { check: { ...summary, ok: false, errors: check.errors, errorCount: check.errorCount } });
+    }
     if (!check.ok) return bad("검증 실패", 422, { check: summary });
     if (dryRun) return Response.json({ check: summary });
     const [up] = await db!.insert(salesUploads).values({
@@ -72,8 +83,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inputs/[kind]">
   if (!body) return bad("JSON 본문이 필요합니다");
 
   if (kind === "counts") {
-    const storeId = String(body.storeId ?? "");
-    if (!m.stores.some((s) => s.store_id === storeId)) return bad(`없는 매장: ${storeId}`);
+    const storeId = sess.storeId;
     const { providedEnd, ends } = await storeDataEnds();
     const maxDate = addDays(ends[storeId] ?? providedEnd, 1);
     const items: unknown[] = Array.isArray(body.items) ? body.items : [];
@@ -111,12 +121,14 @@ export async function POST(req: Request, ctx: RouteContext<"/api/inputs/[kind]">
 export async function DELETE(req: Request, ctx: RouteContext<"/api/inputs/[kind]">) {
   const kind = await kindOf(ctx);
   if (!kind) return bad("알 수 없는 입력 종류", 404);
+  const sess = requireSession(req);
+  if (sess instanceof Response) return sess;
   if (!db) return noDb();
   const id = Number(new URL(req.url).searchParams.get("id"));
   if (!Number.isInteger(id) || id <= 0) return bad("id 가 필요합니다");
   switch (kind) {
     case "counts":
-      await db.delete(stockCounts).where(eq(stockCounts.id, id));
+      await db.delete(stockCounts).where(and(eq(stockCounts.id, id), eq(stockCounts.storeId, sess.storeId)));
       break;
     case "master":
       await db.delete(masterEdits).where(eq(masterEdits.id, id));
@@ -127,7 +139,7 @@ export async function DELETE(req: Request, ctx: RouteContext<"/api/inputs/[kind]
     case "sales": {
       // 중간 업로드를 지우면 판매 기록에 빈 날이 생겨 재고를 이어 계산할 수 없다 → 가장 최근 것부터만 삭제
       const [up] = await db.select().from(salesUploads).where(eq(salesUploads.id, id));
-      if (!up) return bad("없는 업로드", 404);
+      if (!up || up.storeIds !== sess.storeId) return bad("없는 업로드", 404);
       const later = await db.select({ id: salesUploads.id, storeIds: salesUploads.storeIds }).from(salesUploads)
         .where(and(ne(salesUploads.id, id), gt(salesUploads.dateFrom, up.dateTo)));
       const mine = new Set(up.storeIds.split(","));

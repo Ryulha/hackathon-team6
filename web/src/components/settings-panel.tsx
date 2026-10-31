@@ -10,17 +10,23 @@ export const CALC_KEYS = ["demandAdjustPct", "lookbackWeeks", "applyPromo", "ser
 
 /** 왼쪽 패널: 매일 바꾸는 값(매장·기준일·현재 시각)만 */
 export function SettingsPanel() {
-  const { snapshot, asOf, storeId, setAsOf, setStoreId, settings, setSettings } = useApp();
+  const { snapshot, asOf, storeId, setAsOf, settings, setSettings } = useApp();
+  const store = snapshot?.stores.find((s) => s.store_id === storeId);
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- 이전 매장 데이터가 메모리에 남지 않게 전체 새로고침
+    window.location.href = "/login";
+  };
   const changed = CALC_KEYS.filter((k) => settings[k] !== DEFAULT_SETTINGS[k]).length;
   return (
     <aside className="flex flex-col gap-4 text-sm">
-      <h2 className="section-title">매장·날짜</h2>
-      <label className="flex flex-col gap-1">
-        <span className="hint !text-sm">매장</span>
-        <select className="input" value={storeId ?? ""} onChange={(e) => setStoreId(e.target.value)}>
-          {snapshot?.stores.map((s) => <option key={s.store_id} value={s.store_id}>{s.store_name} ({s.store_id})</option>)}
-        </select>
-      </label>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <span className="hint">로그인한 매장</span>
+          <p className="font-semibold">{store?.store_name ?? "…"} <span className="hint font-normal">관리자</span></p>
+        </div>
+        <button className="btn-ghost !px-2 !py-1 text-xs" onClick={logout}>로그아웃</button>
+      </div>
       <label className="flex flex-col gap-1">
         <span className="hint !text-sm">기준일 (발주 판단일)</span>
         <input type="date" className="input" value={asOf ?? ""} min={snapshot?.meta.dataStart}

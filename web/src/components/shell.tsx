@@ -20,6 +20,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const { snapshot, loading, error } = useApp();
   const ov = snapshot?.meta.overlay;
+  // 로그인 화면은 사이드바 없이 전체 화면
+  if (path === "/login") return <>{children}</>;
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-4 p-4 lg:flex-row lg:gap-6 lg:p-6">
       <div className="flex flex-col gap-4 lg:sticky lg:top-6 lg:h-fit lg:w-64 lg:shrink-0">
