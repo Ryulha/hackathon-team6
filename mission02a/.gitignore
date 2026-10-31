@@ -1,0 +1,8 @@
+# All diagnostic data, reports, models, and evidence remain local.
+evidence/
+reproduction/
+part1_reproduction/
+outputs/
+reports/
+__pycache__/
+.pytest_cache/

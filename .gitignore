@@ -218,3 +218,29 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Forecast workspace: source data and generated artifacts stay local.
+**/data/
+**/*.csv
+**/*.pdf
+**/.Rhistory
+**/.DS_Store
+**/데이터명세서.md
+**/데이터명세서.md
+크라이치즈버거_AX해커톤_주제1_데이터/
+크라이치즈버거_AX해커톤_주제1_데이터/
+.venv/
+outputs/
+models/*
+!models/.gitkeep
+catboost_info/
+*.cbm
+
+# Mission runs contain fitted models, row-level predictions, and audit output.
+mission02a/evidence/
+mission02a/outputs/
+mission02a/part1_reproduction/
+mission02a/reproduction/
+mission02b/audit/
+mission02b/reproduction/
+mission02b/runs/
