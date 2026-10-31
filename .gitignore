@@ -1,0 +1,25 @@
+# 제공 데이터는 공개 저장소 게시 금지 (명세서 이용 안내)
+data/raw/*
+!data/raw/.gitkeep
+*.csv
+!pipeline/fixtures/*.csv
+web/src/data/generated/*
+!web/src/data/generated/.gitkeep
+pipeline/reports/
+pipeline/.team_cache/
+
+# env
+.env
+.env*.local
+web/.env*
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# vercel
+.vercel
+
+# 개인 작업 지침 (저장소에 올리지 않음)
+CLAUDE.md

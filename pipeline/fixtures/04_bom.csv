@@ -1,0 +1,9 @@
+menu_id,ingredient_id,qty_per_menu,use_unit
+M01,I01,1,개
+M01,I02,100,g
+M01,I03,20,g
+M02,I04,150,g
+M03,I01,1,개
+M03,I02,100,g
+M03,I03,20,g
+M03,I04,150,g
