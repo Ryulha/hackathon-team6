@@ -1,0 +1,4 @@
+menu_id,menu_name,category,is_set,set_components,virtual_price
+M01,불고기버거,버거,0,,6000
+M02,감자튀김,사이드,0,,2500
+M03,불고기세트,세트,1,M01|M02,8000

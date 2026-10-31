@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f7f5;
+  --surface: #ffffff;
+  --foreground: #1c1c1a;
+  --muted: #6b6b66;
+  --border: #e3e2dd;
+  --accent: #1f6f5c;
+  --high: #c0392b;
+  --medium: #b7791f;
+  --low: #3d6fb6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121211;
+    --surface: #1b1b19;
+    --foreground: #ecebe6;
+    --muted: #9b9a93;
+    --border: #2e2d2a;
+    --accent: #5fbfa6;
+    --high: #ef6f5f;
+    --medium: #e0a648;
+    --low: #7ea6e6;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+
+@layer components {
+  .card { @apply rounded-lg border p-4; background: var(--surface); border-color: var(--border); }
+  .input { @apply rounded border px-2 py-1; background: var(--surface); border-color: var(--border); }
+  .btn { @apply rounded border px-3 py-1.5 text-sm font-medium; border-color: var(--border); background: var(--surface); }
+  .btn-primary { @apply rounded px-3 py-1.5 text-sm font-medium text-white; background: var(--accent); }
+  .tbl { @apply w-full text-sm; }
+  .tbl th { @apply border-b px-2 py-1.5 text-left font-medium whitespace-nowrap; border-color: var(--border); color: var(--muted); }
+  .tbl td { @apply border-b px-2 py-1.5 align-top; border-color: var(--border); }
+  .num { @apply text-right tabular-nums; }
+}

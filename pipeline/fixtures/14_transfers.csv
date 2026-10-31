@@ -1,0 +1,2 @@
+transfer_id,date,hour,from_store_id,to_store_id,ingredient_id,qty,use_unit,reason
+T001,2026-09-05,15,S01,S02,I03,500,g,긴급 지원
