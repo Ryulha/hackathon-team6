@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,14 @@ EXTRA_HOLIDAYS = {"2026-10-03": "개천절", "2026-10-05": "대체공휴일", "2
 
 # 품절 위험 허용 수준 → 정규분포 z (서비스 수준)
 RISK_LEVELS = {"넉넉하게 (여유분 확대)": 2.05, "보통": 1.28, "타이트하게 (재고 최소)": 0.67}
+
+# [3] 최적화 설정
+SO_WINDOW = 28          # 품절 이력 조회 기간(일), 기준일 전날까지
+Z_BOOST = 0.36          # 최근 품절 품목의 z 상향폭 (1.28→1.64 ≈ 서비스수준 90%→95%)
+Z_MAX = 2.33
+WASTE_CUT_RATIO = 0.5   # 마지막 1발주단위 중 이 비율 이상이 폐기 예상이면 감량
+LONG_SHELF = 14         # 사용기한이 이 일수 이상이면 '장기 품목'
+Z_LONG = 2.05           # 장기 품목 최소 z: 남아도 버릴 위험이 거의 없으니 품절 방지 우선
 
 
 def _r(name):
@@ -43,6 +52,7 @@ class Data:
     waste: pd.DataFrame
     daily: pd.DataFrame  # store × menu × date 수요 (demand - cancel)
     holidays: set
+    stockouts: pd.DataFrame | None = None  # [3] 17_stockouts
 
 
 def load() -> Data:
@@ -78,8 +88,11 @@ def load() -> Data:
     for c in ["start_date", "end_date"]:
         promo[c] = pd.to_datetime(promo[c])
 
+    stockouts = _r("17_stockouts.csv")  # [3] 마감 후 보고 → 기준일 D에는 D-1까지만 사용
+    stockouts["date"] = pd.to_datetime(stockouts["date"])
+
     return Data(_r("01_stores.csv"), _r("02_menus.csv"), _r("03_ingredients.csv"), _r("04_bom.csv"),
-                sup, price, cal, promo, avail, po, lots, inv, waste, daily, hol)
+                sup, price, cal, promo, avail, po, lots, inv, waste, daily, hol, stockouts)
 
 
 # ───────────────────────── 날짜 규칙 ─────────────────────────
@@ -114,16 +127,20 @@ def unit_price(D: Data, ing_id: str, day: pd.Timestamp) -> int:
     return int(p.sort_values("valid_from").unit_price.iloc[-1])
 
 
+def _avail_intervals(D: Data, store: str, menu: str) -> list:
+    """[3] 취급 기간을 (매장, 메뉴)별로 한 번만 계산해 캐시 (동작은 기존과 동일)"""
+    cache = D.__dict__.setdefault("_avail_cache", {})
+    key = (store, menu)
+    if key not in cache:
+        a = D.avail[(D.avail.store_id == store) & (D.avail.menu_id == menu) & (D.avail.status == "취급")]
+        last_data = pd.Timestamp("2026-09-30")
+        cache[key] = [(r.start_date, pd.Timestamp.max if r.end_date >= last_data else r.end_date)
+                      for r in a.itertuples()]  # 9/30 종료 = 데이터 끝, 계속 취급 가정
+    return cache[key]
+
+
 def menu_available(D: Data, store: str, menu: str, t: pd.Timestamp) -> bool:
-    a = D.avail[(D.avail.store_id == store) & (D.avail.menu_id == menu) & (D.avail.status == "취급")]
-    if a.empty:
-        return False
-    last_data = pd.Timestamp("2026-09-30")
-    for _, r in a.iterrows():
-        end = pd.Timestamp.max if r.end_date >= last_data else r.end_date  # 9/30 종료 = 데이터 끝, 계속 취급 가정
-        if r.start_date <= t <= end:
-            return True
-    return False
+    return any(s <= t <= e for s, e in _avail_intervals(D, store, menu))
 
 
 # ───────────────────────── 수요 예측 ─────────────────────────
@@ -150,16 +167,26 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
             ratios.append(allt[h] / same.mean())
     hol_mult = float(np.median(ratios)) if ratios else 1.0
 
-    # 행사 배수 (P01: 세트 할인) — 과거 행사기간 대상 메뉴 / 행사 직전 28일
-    promo_mult = 1.0
+    # 행사 배수 — 과거 행사기간 대상 메뉴 / 행사 직전 28일 [3] 행사 여러 건 대응
+    #   해당 매장 행사 이력이 있으면 그것만, 없으면 전체 행사 이력으로 메뉴별 배수(중앙값) 추정
+    promo_mult, promo_by_menu = 1.0, {}
     if promo_on and len(D.promo):
-        p = D.promo.iloc[0]
-        tm = p.target_menu.split(",")
-        h = D.daily[(D.daily.store_id == p.store_id) & D.daily.menu_id.isin(tm)].groupby("date").y.sum()
-        h = h[h.index < day]  # 시나리오 배수도 기준일 이전 관측만 사용
-        during = h[(h.index >= p.start_date) & (h.index <= p.end_date)].mean()
-        before = h[(h.index < p.start_date) & (h.index >= p.start_date - pd.Timedelta(days=28))].mean()
-        promo_mult = float(during / before) if pd.notna(during) and pd.notna(before) and before > 0 else 1.0
+        ps = D.promo[D.promo.store_id == store]
+        if ps.empty:
+            ps = D.promo
+        ratios_m = {}
+        for p in ps.itertuples():
+            tm = [x for x in re.split(r"[,|;/\s]+", str(p.target_menu)) if x]
+            h = D.daily[(D.daily.store_id == p.store_id) & D.daily.menu_id.isin(tm)].groupby("date").y.sum()
+            h = h[h.index < day]  # 시나리오 배수도 기준일 이전 관측만 사용
+            during = h[(h.index >= p.start_date) & (h.index <= p.end_date)].mean()
+            before = h[(h.index < p.start_date) & (h.index >= p.start_date - pd.Timedelta(days=28))].mean()
+            if pd.notna(during) and pd.notna(before) and before > 0:
+                for m in tm:
+                    ratios_m.setdefault(m, []).append(float(during / before))
+        promo_by_menu = {m: float(np.median(v)) for m, v in ratios_m.items()}
+        if promo_by_menu:
+            promo_mult = float(np.median(list(promo_by_menu.values())))
 
     rows = []
     recent = hist[hist.date >= day - pd.Timedelta(days=28)]
@@ -179,11 +206,12 @@ def forecast_menus(D: Data, store: str, day: pd.Timestamp, horizon: int, demand_
                 f = 0.0
             else:
                 f = level * dow_idx[wd(t)] * (hol_mult if t in D.holidays else 1.0)
-                if promo_on and m in D.promo.iloc[0].target_menu.split(","):
-                    f *= promo_mult
+                if promo_on and m in promo_by_menu:
+                    f *= promo_by_menu[m]
             rows.append((m, t, f * (1 + demand_adj)))
     out = pd.DataFrame(rows, columns=["menu_id", "date", "f"])
-    out.attrs.update(dow_idx=dow_idx.to_dict(), hol_mult=hol_mult, promo_mult=promo_mult)
+    out.attrs.update(dow_idx=dow_idx.to_dict(), hol_mult=hol_mult, promo_mult=promo_mult,
+                     promo_mult_by_menu=promo_by_menu)
     return out
 
 
@@ -260,6 +288,27 @@ def pending_arrivals(D: Data, store: str, day: pd.Timestamp) -> pd.DataFrame:
     return p[["ingredient_id", "expected_date", "use_qty"]]
 
 
+def stockout_history(D: Data, store: str, day: pd.Timestamp, window: int = SO_WINDOW) -> pd.DataFrame:
+    """[3] 기준일 전날까지 최근 window일 품목별 품절 이력. index=ingredient_id
+    컬럼: stockout_28d(품절 일수), stockout_hour(가장 잦은 첫 손실 시간대), last_stockout"""
+    cols = ["stockout_28d", "stockout_hour", "last_stockout"]
+    so = D.stockouts
+    if so is None or so.empty:
+        return pd.DataFrame(columns=cols)
+    m = (so.store_id == store) & (so.date < day) & (so.date >= day - pd.Timedelta(days=window))
+    x = so[m]
+    if x.empty:
+        return pd.DataFrame(columns=cols)
+
+    def _mode(s):
+        s = s.dropna()
+        return int(s.mode().iloc[0]) if len(s) else None
+
+    return x.groupby("ingredient_id").agg(stockout_28d=("date", "nunique"),
+                                          stockout_hour=("first_lost_hour", _mode),
+                                          last_stockout=("date", "max"))
+
+
 # ───────────────────────── 시뮬레이션 ─────────────────────────
 def simulate(lots: list[tuple[pd.Timestamp, float]], demand: dict, start: pd.Timestamp, days: int,
              arrivals: dict | None = None):
@@ -288,13 +337,15 @@ def simulate(lots: list[tuple[pd.Timestamp, float]], demand: dict, start: pd.Tim
 
 
 # ───────────────────────── 추천 ─────────────────────────
-def store_state(D: Data, store: str, day: pd.Timestamp, demand_adj=0.0, promo_on=False, horizon=10):
+def store_state(D: Data, store: str, day: pd.Timestamp, demand_adj=0.0, promo_on=False, horizon=14):
+    # [3] 기본 14일: order_waste()의 14일 폐기 시뮬레이션과 예측 기간을 맞춤
     fm = forecast_menus(D, store, day, horizon, demand_adj, promo_on)
     fi = forecast_ingredients(D, fm)
     sig = ingredient_sigma(D, store, day)
     lots = morning_lots(D, store, day)
     pend = pending_arrivals(D, store, day)
-    return dict(fm=fm, fi=fi, sig=sig, lots=lots, pend=pend)
+    so = stockout_history(D, store, day)
+    return dict(fm=fm, fi=fi, sig=sig, lots=lots, pend=pend, so=so, horizon=horizon)
 
 
 def _lots_of(st, ing_id):
@@ -311,9 +362,14 @@ def _arrivals_of(st, ing_id, shelf):
 
 
 def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 1.28, demand_adj: float = 0.0,
-              promo_on: bool = False, horizon: int = 10):
-    """매장·기준일의 품목별 추천표와 상태를 반환."""
+              promo_on: bool = False, horizon: int = 14,
+              waste_aware: bool = True, stockout_boost: bool = True, shelf_tier: bool = True):
+    """매장·기준일의 품목별 추천표와 상태를 반환.
+    [3] waste_aware: 마지막 발주단위가 대부분 폐기될 전망이면 감량(예상 품절이 늘지 않을 때만)
+        stockout_boost: 최근 28일 품절 품목은 z를 Z_BOOST만큼 상향
+        shelf_tier: 사용기한 LONG_SHELF일 이상 품목은 z를 최소 Z_LONG으로 (과잉 비용이 낮은 품목은 넉넉히)"""
     st = store_state(D, store, day, demand_adj, promo_on, horizon)
+    so_hist = st["so"]
     rows = []
     for _, it in D.ing.iterrows():
         s = D.sup.set_index("supplier_id").loc[it.supplier_id]
@@ -338,11 +394,47 @@ def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 1.28, demand_ad
         lost_window = base.loc[arrival:nxt_arrival - pd.Timedelta(days=1), "lost"].sum()
         # 다음 입고일 아침에 남아있을 사용가능 재고
         left_at_next = base.loc[nxt_arrival - pd.Timedelta(days=1), "end"] if nxt_arrival - pd.Timedelta(days=1) in base.index else 0
-        ss = z * st["sig"].get(it.ingredient_id, 0) * math.sqrt(win + 1)  # 안전재고
+        # [3] 최근 품절 이력 → z 상향 (수요 자체는 demand_qty 기반이라 보정하지 않음: 이중 반영 방지)
+        so_n = int(so_hist.stockout_28d.get(it.ingredient_id, 0)) if len(so_hist) else 0
+        so_hour = so_hist.stockout_hour.get(it.ingredient_id) if len(so_hist) else None
+        z_item = max(z, Z_LONG) if (shelf_tier and shelf >= LONG_SHELF) else z  # [3] 기한별 차등
+        z_used = min(z_item + Z_BOOST, Z_MAX) if (stockout_boost and so_n > 0) else z_item
+        ss = z_used * st["sig"].get(it.ingredient_id, 0) * math.sqrt(win + 1)  # 안전재고
         need = lost_window + max(0.0, ss - left_at_next)
         rec = 0
         if can_order and need > 1e-6 and avg > 0:
             rec = max(math.ceil(need / pack), int(it.min_order_qty))
+
+        # [3] 폐기 고려 감량: 1단위 줄였을 때 예상 품절은 그대로이고,
+        #     줄인 1단위 중 WASTE_CUT_RATIO 이상이 기한 내 못 쓰고 폐기될 전망이면 감량
+        rec_before, waste_before, waste_after, adj_reason = rec, 0.0, 0.0, ""
+        if rec > 0:
+            def _eval(u):
+                a2 = {k: list(v) for k, v in arr.items()}
+                if u > 0:
+                    a2.setdefault(arrival, []).append((arrival + pd.Timedelta(days=shelf - 1), u * pack))
+                sim, _ = simulate(lots, dem, day, horizon, a2)
+                sim = sim.set_index("date")
+                return sim.loc[arrival:nxt_arrival - pd.Timedelta(days=1), "lost"].sum(), sim.waste.sum()
+
+            _, w0 = _eval(0)
+            l_rec, w_rec = _eval(rec)
+            u, w_u = rec, w_rec
+            if waste_aware:
+                moq = int(it.min_order_qty)
+                while u > 0:
+                    nu = u - 1
+                    if 0 < nu < moq:
+                        break
+                    l_n, w_n = _eval(nu)
+                    if l_n > l_rec + 1e-6 or (w_u - w_n) < WASTE_CUT_RATIO * pack:
+                        break
+                    u, w_u = nu, w_n
+            rec = u
+            waste_before, waste_after = max(0.0, w_rec - w0), max(0.0, w_u - w0)
+            if rec < rec_before:
+                adj_reason = (f"{rec_before}→{rec}{it.order_unit}: 줄여도 예상 품절 변화 없음, "
+                              f"이번 발주분 예상 폐기 {waste_before:,.0f}→{waste_after:,.0f}{it.use_unit}")
         # 기한 임박 폐기 (발주 안 할 때, 향후 3일)
         waste3 = base.loc[day:day + pd.Timedelta(days=2), "waste"].sum()
         expiring = [(lu, q) for lu, q in lots if lu <= day + pd.Timedelta(days=2)]
@@ -372,6 +464,10 @@ def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 1.28, demand_ad
             expiring_qty=sum(q for _, q in expiring),
             expiring_date=min([lu for lu, _ in expiring]) if expiring else None,
             price=unit_price(D, it.ingredient_id, day), status=status,
+            # [3] 추가 컬럼
+            stockout_28d=so_n, stockout_hour=so_hour, z_used=z_used,
+            rec_before=rec_before, waste_cut=rec_before - rec,
+            waste_before=waste_before, waste_after=waste_after, adj_reason=adj_reason,
         ))
     df = pd.DataFrame(rows)
     df["amount"] = df.rec * df.price
@@ -380,6 +476,7 @@ def recommend(D: Data, store: str, day: pd.Timestamp, z: float = 1.28, demand_ad
 
 def project(D: Data, st, row, order_units: int, day: pd.Timestamp, horizon=10):
     """주문 수량별 재고 전망 (차트·폐기 예측용)."""
+    horizon = min(horizon, st.get("horizon", horizon))  # [3] 예측 기간을 넘겨 시뮬레이션하지 않음
     dem = st["fi"][st["fi"].ingredient_id == row.ingredient_id].set_index("date").need.to_dict()
     lots = _lots_of(st, row.ingredient_id)
     arr = _arrivals_of(st, row.ingredient_id, row.shelf)
